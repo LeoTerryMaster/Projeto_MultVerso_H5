@@ -89,7 +89,7 @@ public class CommunityBoard implements ScriptFile, ICommunityBoardHandler
 		StringTokenizer st = new StringTokenizer(bypass, "_");
 		String cmd = st.nextToken();
 		String html = "";
-
+		ImagesCache.getInstance().sendUsedImages(html, player);
 		if ("bbshome".equals(cmd))
 		{
 			StringTokenizer p = new StringTokenizer(Config.BBS_DEFAULT, "_");
@@ -111,7 +111,7 @@ public class CommunityBoard implements ScriptFile, ICommunityBoardHandler
 				html = html.replace("<?player_premium?>", player.hasBonus() ? "<font color=\"18FF00\">Yes</font>" : "<font color=\"FF0000\">No</font>");
 				html = html.replace("<?geolocation?>", GeoLocation.getInstance().getCountryCode(player) + "/" + GeoLocation.getInstance().getCity(player));
 				html = html.replace("<?server_uptime?>", String.valueOf(uptime()));
-				html = html.replace("%PlayerImage%", "%image:" + player.getRace() + ".png%");
+//				html = html.replace("%PlayerImage%", "%image:" + player.getRace() + ".png%");
 				/*
 				 * @claww - is working but useless....
 				 * try {
@@ -169,7 +169,7 @@ public class CommunityBoard implements ScriptFile, ICommunityBoardHandler
 					html = html.replace("%eventName%", "Load event");
 				}
 
-				ImagesCache.getInstance().sendUsedImages(html, player);
+			
 			}
 			else
 			{

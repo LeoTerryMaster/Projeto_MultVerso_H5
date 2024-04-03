@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <list>
 	<char>
-		<PlayerID set="268481559"/>
+		<PlayerID set="268482054"/>
 		<IsGM set="true"/>
 		<CanUseGMCommand set="true"/>
 		<CanAnnounce set="true"/>

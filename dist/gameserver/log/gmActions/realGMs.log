@@ -1,0 +1,20 @@
+[03.04.24 04:35:06] SUCCESS TerryMaster[268482054] admin_admin
+[03.04.24 04:35:08] SUCCESS TerryMaster[268482054] admin_show_moves
+[03.04.24 04:35:09] SUCCESS TerryMaster[268482054] admin_show_html teleports/town.htm
+[03.04.24 04:35:10] SUCCESS TerryMaster[268482054] admin_show_html teleports/town/giran.htm
+[03.04.24 04:35:10] SUCCESS TerryMaster[268482054] admin_move_to 82698 148638 -3473
+[03.04.24 04:35:45] SUCCESS TerryMaster[268482054] admin_admin
+[03.04.24 04:35:47] SUCCESS TerryMaster[268482054] admin_vis
+[03.04.24 04:35:52] SUCCESS TerryMaster[268482054] admin_admin
+[03.04.24 04:35:53] SUCCESS TerryMaster[268482054] admin_gmspeed 3
+[03.04.24 04:35:57] SUCCESS TerryMaster[268482054] -> 37000 GM Shop admin_admin
+[03.04.24 04:35:58] SUCCESS TerryMaster[268482054] -> 37000 GM Shop admin_gmshop
+[03.04.24 04:35:59] SUCCESS TerryMaster[268482054] -> 37000 GM Shop admin_show_html gmstore/gear/weapons.htm
+[03.04.24 04:36:01] SUCCESS TerryMaster[268482054] -> 37000 GM Shop admin_buy 9998
+[03.04.24 04:37:02] SUCCESS TerryMaster[268482054] admin_admin
+[03.04.24 04:37:04] SUCCESS TerryMaster[268482054] admin_show_html events/gmevent_create.htm
+[03.04.24 04:37:06] SUCCESS TerryMaster[268482054] admin_admin
+[03.04.24 04:37:15] SUCCESS TerryMaster[268482054] admin_list_announcements
+[03.04.24 04:37:17] SUCCESS TerryMaster[268482054] admin_show_html events/events.htm
+[03.04.24 04:37:19] SUCCESS TerryMaster[268482054] admin_char_manage
+[03.04.24 04:37:22] SUCCESS TerryMaster[268482054] admin_server admserver.htm

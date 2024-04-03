@@ -5,6 +5,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import l2mv.gameserver.cache.ImagesCache;
 import l2mv.gameserver.data.htm.bypasshandler.BypassType;
 import l2mv.gameserver.model.Player;
 import l2mv.gameserver.network.serverpackets.components.ChatType;
@@ -38,6 +39,10 @@ public class ShowBoard extends L2GameServerPacket
 		{
 			sendErrorMessageToPlayer(player, "Request Level 6 to Community Board.");
 			return;
+		}
+		html = ImagesCache.getInstance().sendUsedImages(html, player);
+		if (html.startsWith("CREST")) {
+			html = html.substring(5);
 		}
 
 		// Synerge - Remove tabs and enters before sending the html to make it smaller
