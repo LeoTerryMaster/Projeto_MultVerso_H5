@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import l2mv.gameserver.data.htm.HtmCache;
-import l2mv.gameserver.database.LoginDatabaseFactory;
+import l2mv.gameserver.database.DatabaseFactory;
 import l2mv.gameserver.instancemanager.QuestManager;
 import l2mv.gameserver.model.Player;
 import l2mv.gameserver.model.quest.Quest;
@@ -128,7 +128,7 @@ public class CCPSecondaryPassword
 			return;
 		}
 
-		try (Connection con = LoginDatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("UPDATE accounts SET secondaryPassword=? WHERE login=?"))
+		try (Connection con = DatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("UPDATE accounts SET secondaryPassword=? WHERE login=?"))
 		{
 			statement.setString(1, password);
 			statement.setString(2, accountName);
@@ -172,7 +172,7 @@ public class CCPSecondaryPassword
 
 	public static void setSecondaryPassword(String accountName, String password)
 	{
-		try (Connection con = LoginDatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("UPDATE accounts SET secondaryPassword=? WHERE login=?"))
+		try (Connection con = DatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("UPDATE accounts SET secondaryPassword=? WHERE login=?"))
 		{
 			statement.setString(1, password);
 			statement.setString(2, accountName);
@@ -215,7 +215,7 @@ public class CCPSecondaryPassword
 
 	private static String getSecondaryPass(Player player)
 	{
-		try (Connection con = LoginDatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("SELECT secondaryPassword FROM accounts WHERE login='" + player.getAccountName() + "'"); ResultSet rset = statement.executeQuery())
+		try (Connection con = DatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("SELECT secondaryPassword FROM accounts WHERE login='" + player.getAccountName() + "'"); ResultSet rset = statement.executeQuery())
 		{
 			while (rset.next())
 			{
@@ -309,7 +309,7 @@ public class CCPSecondaryPassword
 
 	public static void setEmail(String accountName, String email)
 	{
-		try (Connection con = LoginDatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("UPDATE accounts SET email=? WHERE login=?"))
+		try (Connection con = DatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("UPDATE accounts SET email=? WHERE login=?"))
 		{
 			statement.setString(1, email);
 			statement.setString(2, accountName);

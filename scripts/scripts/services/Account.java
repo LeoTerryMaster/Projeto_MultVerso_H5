@@ -8,7 +8,6 @@ import java.sql.Statement;
 import l2mv.gameserver.Config;
 import l2mv.gameserver.data.xml.holder.ItemHolder;
 import l2mv.gameserver.database.DatabaseFactory;
-import l2mv.gameserver.database.LoginDatabaseFactory;
 import l2mv.gameserver.model.Player;
 import l2mv.gameserver.scripts.Functions;
 import l2mv.gameserver.scripts.ScriptFile;
@@ -52,7 +51,7 @@ public class Account extends Functions implements ScriptFile
 		String _name = name[0];
 		try
 		{
-			try (Connection con = LoginDatabaseFactory.getInstance().getConnection(); PreparedStatement offline = con.prepareStatement("SELECT `login` FROM `accounts` WHERE `login` = ?"))
+			try (Connection con = DatabaseFactory.getInstance().getConnection(); PreparedStatement offline = con.prepareStatement("SELECT `login` FROM `accounts` WHERE `login` = ?"))
 			{
 				offline.setString(1, _name);
 				try (ResultSet rs = offline.executeQuery())

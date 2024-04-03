@@ -175,14 +175,24 @@ public class Config
 
 		GAME_SERVER_LOGIN_HOST = serverSettings.getProperty("LoginHost", "127.0.0.1");
 		GAME_SERVER_LOGIN_PORT = serverSettings.getProperty("LoginPort", 9014);
+		
+		
+		Config.DATABASE_DRIVER = serverSettings.getProperty("dataSourceClassName", "org.mariadb.jdbc.Driver");
+		String databaseHost = serverSettings.getProperty("Database_Host", "localhost");
+		int databasePort = serverSettings.getProperty("Maria_Port", 3306);
+		String databaseName = serverSettings.getProperty("Data_Name", "l2auth");
+		Config.DATABASE_URL = serverSettings.getProperty("URL", "jdbc:mariadb://" + databaseHost + ":" + databasePort + "/" + databaseName + "?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=UTC");
+		Config.DATABASE_LOGIN = serverSettings.getProperty("Login", "root");
+		Config.DATABASE_PASSWORD = serverSettings.getProperty("Password", "root");
 
-		DATABASE_DRIVER = serverSettings.getProperty("Driver", "com.mysql.jdbc.Driver");
+		
+		
 		DATABASE_MAX_CONNECTIONS = serverSettings.getProperty("MaximumDbConnections", 3);
 		DATABASE_MAX_IDLE_TIMEOUT = serverSettings.getProperty("MaxIdleConnectionTimeout", 600);
 		DATABASE_IDLE_TEST_PERIOD = serverSettings.getProperty("IdleConnectionTestPeriod", 60);
-		DATABASE_URL = serverSettings.getProperty("URL", "jdbc:mysql://localhost/l2jdb");
-		DATABASE_LOGIN = serverSettings.getProperty("Login", "root");
-		DATABASE_PASSWORD = serverSettings.getProperty("Password", "");
+	
+		
+		
 
 		SCHEDULE_RESTART_SECONDS = serverSettings.getProperty("ScheduleRestart", -1L);
 

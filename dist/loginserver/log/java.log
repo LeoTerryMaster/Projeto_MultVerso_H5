@@ -49,3 +49,96 @@ java.io.FileNotFoundException: F:\GITHUB\PROJETOS\Projeto_H5_Custon\Projeto_H5_C
 [26.04.23 23:28:14:945]  INFO loginserver.AuthServer: Listening for gameservers on 127.0.0.1:9014
 [26.04.23 23:28:14:945]  INFO loginserver.AuthServer: Listening for clients on 127.0.0.1:2106
 [26.04.23 23:28:14:945]  INFO loginserver.AuthServer: Login Server will automatically restart in 7200 seconds!
+[03.04.24 02:28:59:835]  INFO loginserver.Config: Loaded 127 server names
+[03.04.24 03:23:50:523]  INFO loginserver.Config: Loaded 127 server names
+[03.04.24 03:32:34:463]  INFO loginserver.Config: Loaded 127 server names
+[03.04.24 03:39:46:074]  INFO loginserver.Config: Loaded 127 server names
+[03.04.24 03:39:46:278] ERROR versioning.Version: Unable to get soft information
+File name 'I:\GITHUB\PROJETOS_EM_ANDAMENTOS\Projeto_MultVerso_H5\bin' isn't a valid jar
+java.io.FileNotFoundException: I:\GITHUB\PROJETOS_EM_ANDAMENTOS\Projeto_MultVerso_H5\bin (Acesso negado)
+	at java.base/java.io.RandomAccessFile.open0(Native Method)
+	at java.base/java.io.RandomAccessFile.open(RandomAccessFile.java:344)
+	at java.base/java.io.RandomAccessFile.<init>(RandomAccessFile.java:259)
+	at java.base/java.io.RandomAccessFile.<init>(RandomAccessFile.java:213)
+	at java.base/java.util.zip.ZipFile$Source.<init>(ZipFile.java:1477)
+	at java.base/java.util.zip.ZipFile$Source.get(ZipFile.java:1442)
+	at java.base/java.util.zip.ZipFile$CleanableResource.<init>(ZipFile.java:718)
+	at java.base/java.util.zip.ZipFile.<init>(ZipFile.java:252)
+	at java.base/java.util.zip.ZipFile.<init>(ZipFile.java:181)
+	at java.base/java.util.jar.JarFile.<init>(JarFile.java:346)
+	at java.base/java.util.jar.JarFile.<init>(JarFile.java:317)
+	at java.base/java.util.jar.JarFile.<init>(JarFile.java:283)
+	at l2mv.commons.versioning.Version.<init>(Version.java:26)
+	at l2mv.loginserver.AuthServer.<init>(AuthServer.java:36)
+	at l2mv.loginserver.AuthServer.main(AuthServer.java:117)
+[03.04.24 03:39:46:279]  INFO loginserver.AuthServer: ============================================================================
+[03.04.24 03:39:46:279]  INFO loginserver.AuthServer: Nome: ............................................... LOGIN SERVER
+[03.04.24 03:39:46:279]  INFO loginserver.AuthServer: Project Revision: ................................... LII [MultVerso]
+[03.04.24 03:39:46:279]  INFO loginserver.AuthServer: Update: ............................................. High Five: Part 5
+[03.04.24 03:39:46:280]  INFO loginserver.AuthServer: Numero da Revision:.................................. -1
+[03.04.24 03:39:46:280]  INFO loginserver.AuthServer: Build Revision: ..................................... exported
+[03.04.24 03:39:46:280]  INFO loginserver.AuthServer: Build date: ......................................... 
+[03.04.24 03:39:46:280]  INFO loginserver.AuthServer: Compiler version: ................................... 
+[03.04.24 03:39:46:280]  INFO loginserver.AuthServer: ============================================================================
+[03.04.24 03:39:46:281]  INFO loginserver.Config: Loaded whirlpool2 as default crypt.
+[03.04.24 03:39:46:660]  INFO loginserver.Config: Cached 10 KeyPairs for RSA communication
+[03.04.24 03:39:46:701]  INFO loginserver.Config: Stored 20 keys for Blowfish communication
+[03.04.24 03:39:46:708]  INFO loginserver.GameServerManager: Loaded 1 registered GameServer(s).
+[03.04.24 03:39:46:761]  INFO loginserver.AuthServer: Listening for gameservers on 127.0.0.1:9014
+[03.04.24 03:39:46:762]  INFO loginserver.AuthServer: Listening for clients on 127.0.0.1:2106
+[03.04.24 03:39:46:764]  INFO loginserver.AuthServer: Login Server will automatically restart in 7200 seconds!
+[03.04.24 04:09:25:927]  INFO loginserver.Config: Loaded 127 server names
+[03.04.24 04:09:26:110] ERROR versioning.Version: Unable to get soft information
+File name 'I:\GITHUB\PROJETOS_EM_ANDAMENTOS\Projeto_MultVerso_H5\bin' isn't a valid jar
+java.io.FileNotFoundException: I:\GITHUB\PROJETOS_EM_ANDAMENTOS\Projeto_MultVerso_H5\bin (Acesso negado)
+	at java.base/java.io.RandomAccessFile.open0(Native Method)
+	at java.base/java.io.RandomAccessFile.open(RandomAccessFile.java:344)
+	at java.base/java.io.RandomAccessFile.<init>(RandomAccessFile.java:259)
+	at java.base/java.io.RandomAccessFile.<init>(RandomAccessFile.java:213)
+	at java.base/java.util.zip.ZipFile$Source.<init>(ZipFile.java:1477)
+	at java.base/java.util.zip.ZipFile$Source.get(ZipFile.java:1442)
+	at java.base/java.util.zip.ZipFile$CleanableResource.<init>(ZipFile.java:718)
+	at java.base/java.util.zip.ZipFile.<init>(ZipFile.java:252)
+	at java.base/java.util.zip.ZipFile.<init>(ZipFile.java:181)
+	at java.base/java.util.jar.JarFile.<init>(JarFile.java:346)
+	at java.base/java.util.jar.JarFile.<init>(JarFile.java:317)
+	at java.base/java.util.jar.JarFile.<init>(JarFile.java:283)
+	at l2mv.commons.versioning.Version.<init>(Version.java:26)
+	at l2mv.loginserver.AuthServer.<init>(AuthServer.java:36)
+	at l2mv.loginserver.AuthServer.main(AuthServer.java:117)
+[03.04.24 04:09:26:111]  INFO loginserver.AuthServer: ============================================================================
+[03.04.24 04:09:26:111]  INFO loginserver.AuthServer: Nome: ............................................... LOGIN SERVER
+[03.04.24 04:09:26:111]  INFO loginserver.AuthServer: Project Revision: ................................... LII [MultVerso]
+[03.04.24 04:09:26:111]  INFO loginserver.AuthServer: Update: ............................................. High Five: Part 5
+[03.04.24 04:09:26:112]  INFO loginserver.AuthServer: Numero da Revision:.................................. -1
+[03.04.24 04:09:26:112]  INFO loginserver.AuthServer: Build Revision: ..................................... exported
+[03.04.24 04:09:26:112]  INFO loginserver.AuthServer: Build date: ......................................... 
+[03.04.24 04:09:26:112]  INFO loginserver.AuthServer: Compiler version: ................................... 
+[03.04.24 04:09:26:112]  INFO loginserver.AuthServer: ============================================================================
+[03.04.24 04:09:26:113]  INFO loginserver.Config: Loaded whirlpool2 as default crypt.
+[03.04.24 04:09:26:479]  INFO loginserver.Config: Cached 10 KeyPairs for RSA communication
+[03.04.24 04:09:26:497]  INFO loginserver.Config: Stored 20 keys for Blowfish communication
+[03.04.24 04:09:26:504]  INFO loginserver.GameServerManager: Loaded 1 registered GameServer(s).
+[03.04.24 04:09:26:553]  INFO loginserver.AuthServer: Listening for gameservers on 127.0.0.1:9014
+[03.04.24 04:09:26:553]  INFO loginserver.AuthServer: Listening for clients on 127.0.0.1:2106
+[03.04.24 04:09:26:555]  INFO loginserver.AuthServer: Login Server will automatically restart in 7200 seconds!
+[03.04.24 04:10:15:731]  INFO gspackets.AuthRequest: Trying to register gameserver: 1 [127.0.0.1]
+[03.04.24 04:10:15:732]  INFO gspackets.AuthRequest: Gameserver registration successful.
+[03.04.24 04:12:17:584]  INFO serverpackets.ServerList: IP: 127.0.0.1 Login: terrygomes Assigned to Proxy: 127.0.0.1
+[03.04.24 04:12:34:102]  INFO serverpackets.ServerList: IP: 127.0.0.1 Login: terrygomes Assigned to Proxy: 127.0.0.1
+[03.04.24 04:13:40:323] ERROR gameservercon.GameServerCommunication: Gameserver I/O error: Connection reset
+[03.04.24 04:13:40:323]  INFO gameservercon.GameServerConnection: Connection with gameserver 1 [Bartz] lost.
+[03.04.24 04:13:40:323]  INFO gameservercon.GameServerConnection: Setting gameserver down.
+[03.04.24 04:18:31:949]  INFO gspackets.AuthRequest: Trying to register gameserver: 1 [127.0.0.1]
+[03.04.24 04:18:31:950]  INFO gspackets.AuthRequest: Gameserver registration successful.
+[03.04.24 04:18:36:465]  INFO serverpackets.ServerList: IP: 127.0.0.1 Login: terrygomes Assigned to Proxy: 127.0.0.1
+[03.04.24 04:33:24:123]  INFO serverpackets.ServerList: IP: 127.0.0.1 Login: terrygomes Assigned to Proxy: 127.0.0.1
+[03.04.24 04:33:46:939] ERROR gameservercon.GameServerCommunication: Gameserver I/O error: Connection reset
+[03.04.24 04:33:46:939]  INFO gameservercon.GameServerConnection: Connection with gameserver 1 [Bartz] lost.
+[03.04.24 04:33:46:939]  INFO gameservercon.GameServerConnection: Setting gameserver down.
+[03.04.24 04:34:43:920]  INFO gspackets.AuthRequest: Trying to register gameserver: 1 [127.0.0.1]
+[03.04.24 04:34:43:921]  INFO gspackets.AuthRequest: Gameserver registration successful.
+[03.04.24 04:34:49:659]  INFO serverpackets.ServerList: IP: 127.0.0.1 Login: terrygomes Assigned to Proxy: 127.0.0.1
+[03.04.24 04:43:44:456] ERROR gameservercon.GameServerCommunication: Gameserver I/O error: Connection reset
+[03.04.24 04:43:44:456]  INFO gameservercon.GameServerConnection: Connection with gameserver 1 [Bartz] lost.
+[03.04.24 04:43:44:456]  INFO gameservercon.GameServerConnection: Setting gameserver down.

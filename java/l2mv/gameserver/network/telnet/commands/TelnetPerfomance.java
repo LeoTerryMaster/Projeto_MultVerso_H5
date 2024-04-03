@@ -252,15 +252,15 @@ public class TelnetPerfomance implements TelnetCommandHolder
 				sb.append("Basic database usage\n");
 				sb.append("=================================================\n");
 				sb.append("Connections").append("\n");
-				try
-				{
-					sb.append("     Busy: ........................ ").append(DatabaseFactory.getInstance().getBusyConnectionCount()).append("\n");
-					sb.append("     Idle: ........................ ").append(DatabaseFactory.getInstance().getIdleConnectionCount()).append("\n");
-				}
-				catch (SQLException e)
-				{
-					return "Error: " + e.getMessage() + "\n";
-				}
+//				try
+//				{
+//					sb.append("     Busy: ........................ ").append(DatabaseFactory.getInstance().getBusyConnectionCount()).append("\n");
+//					sb.append("     Idle: ........................ ").append(DatabaseFactory.getInstance().getIdleConnectionCount()).append("\n");
+//				}
+//				catch (SQLException e)
+//				{
+//					return "Error: " + e.getMessage() + "\n";
+//				}
 
 				sb.append("Players").append("\n");
 				sb.append("     Update: ...................... ").append(GameStats.getUpdatePlayerBase()).append("\n");

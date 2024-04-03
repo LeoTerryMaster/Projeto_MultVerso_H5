@@ -70,7 +70,6 @@ import l2mv.gameserver.handler.admincommands.impl.AdminShop;
 import l2mv.gameserver.handler.admincommands.impl.AdminShutdown;
 import l2mv.gameserver.handler.admincommands.impl.AdminSkill;
 import l2mv.gameserver.handler.admincommands.impl.AdminSpawn;
-import l2mv.gameserver.handler.admincommands.impl.AdminStream;
 import l2mv.gameserver.handler.admincommands.impl.AdminTarget;
 import l2mv.gameserver.handler.admincommands.impl.AdminTeam;
 import l2mv.gameserver.handler.admincommands.impl.AdminTeleport;
@@ -160,7 +159,6 @@ public class AdminCommandHandler extends AbstractHolder
 		registerAdminCommandHandler(new AdminPremium());
 		registerAdminCommandHandler(new AdminTournament());
 		registerAdminCommandHandler(new AdminFacebook());
-		registerAdminCommandHandler(new AdminStream());
 		registerAdminCommandHandler(new AdminChat());
 		registerAdminCommandHandler(new AdminGlobalPvpEvent());
 		registerAdminCommandHandler(new AdminGathering());

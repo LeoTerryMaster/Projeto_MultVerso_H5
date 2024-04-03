@@ -14,7 +14,6 @@ import l2mv.loginserver.gameservercon.GameServer;
 import l2mv.loginserver.gameservercon.SendablePacket;
 import l2mv.loginserver.gameservercon.lspackets.GetAccountInfo;
 import l2mv.loginserver.gameservercon.lspackets.OnWrongAccountPassword;
-import l2mv.loginserver.merge.AccountMerge;
 import l2mv.loginserver.serverpackets.LoginFail;
 import l2mv.loginserver.serverpackets.LoginFail.LoginFailReason;
 import l2mv.loginserver.serverpackets.LoginOk;
@@ -92,15 +91,15 @@ public class RequestAuthLogin extends L2LoginClientPacket
 			return;
 		}
 
-		if (Config.ENABLE_MERGE)
-		{
-			final Account mergeAccount = AccountMerge.getInstance().tryMergeAccount(user);
-			if (mergeAccount != null)
-			{
-				afterConnection(mergeAccount, passwordHash, password, client, user);
-				return;
-			}
-		}
+//		if (Config.ENABLE_MERGE)
+//		{
+//			final Account mergeAccount = AccountMerge.getInstance().tryMergeAccount(user);
+//			if (mergeAccount != null)
+//			{
+//				afterConnection(mergeAccount, passwordHash, password, client, user);
+//				return;
+//			}
+//		}
 
 		if (Config.AUTO_CREATE_ACCOUNTS && user.matches(Config.ANAME_TEMPLATE) && password.matches(Config.APASSWD_TEMPLATE) && !user.equalsIgnoreCase(password))
 		{

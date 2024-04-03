@@ -28,23 +28,7 @@ import l2mv.gameserver.data.xml.holder.ResidenceHolder;
 import l2mv.gameserver.data.xml.holder.StaticObjectHolder;
 import l2mv.gameserver.data.xml.parser.ProxiesParser;
 import l2mv.gameserver.database.DatabaseFactory;
-import l2mv.gameserver.database.LoginDatabaseFactory;
-import l2mv.gameserver.database.merge.ClanDataMerge;
-import l2mv.gameserver.database.merge.DataMerge;
 import l2mv.gameserver.donation.DonationReader;
-import l2mv.gameserver.multverso.datatables.EnchantNamesTable;
-//import fandc.datatables.CharacterMonthlyRanking;
-import l2mv.gameserver.multverso.datatables.OfflineBuffersTable;
-import l2mv.gameserver.multverso.facebook.ActionsExtractingManager;
-import l2mv.gameserver.multverso.facebook.CompletedTasksHistory;
-import l2mv.gameserver.multverso.facebook.FacebookAutoAnnouncement;
-import l2mv.gameserver.multverso.facebook.FacebookProfilesHolder;
-import l2mv.gameserver.multverso.facebook.OfficialPostsHolder;
-import l2mv.gameserver.multverso.security.AntiFeedManager;
-import l2mv.gameserver.multverso.streaming.AFKStreamersHandler;
-import l2mv.gameserver.multverso.streaming.TwitchParser;
-import l2mv.gameserver.multverso.tournament.TournamentHolder;
-import l2mv.gameserver.multverso.votingengine.VotingRewardAPI;
 import l2mv.gameserver.geodata.GeoEngine;
 import l2mv.gameserver.handler.admincommands.AdminCommandHandler;
 import l2mv.gameserver.handler.items.ItemHandler;
@@ -97,10 +81,21 @@ import l2mv.gameserver.model.entity.achievements.Achievements;
 import l2mv.gameserver.model.entity.achievements.PlayerCounters;
 import l2mv.gameserver.model.entity.auction.AuctionManager;
 import l2mv.gameserver.model.entity.events.fightclubmanager.FightClubEventManager;
-import l2mv.gameserver.model.entity.forum.ForumDatabaseHandler;
 import l2mv.gameserver.model.entity.olympiad.Olympiad;
 import l2mv.gameserver.model.entity.tournament.ActiveBattleManager;
 import l2mv.gameserver.model.entity.tournament.BattleScheduleManager;
+import l2mv.gameserver.multverso.datatables.EnchantNamesTable;
+//import fandc.datatables.CharacterMonthlyRanking;
+import l2mv.gameserver.multverso.datatables.OfflineBuffersTable;
+import l2mv.gameserver.multverso.facebook.ActionsExtractingManager;
+import l2mv.gameserver.multverso.facebook.CompletedTasksHistory;
+import l2mv.gameserver.multverso.facebook.FacebookAutoAnnouncement;
+import l2mv.gameserver.multverso.facebook.FacebookProfilesHolder;
+import l2mv.gameserver.multverso.facebook.OfficialPostsHolder;
+import l2mv.gameserver.multverso.security.AntiFeedManager;
+import l2mv.gameserver.multverso.streaming.TwitchParser;
+import l2mv.gameserver.multverso.tournament.TournamentHolder;
+import l2mv.gameserver.multverso.votingengine.VotingRewardAPI;
 import l2mv.gameserver.network.FakeGameClient;
 import l2mv.gameserver.network.GameClient;
 import l2mv.gameserver.network.GamePacketHandler;
@@ -286,8 +281,6 @@ public class GameServer
 
 		Class.forName(Config.DATABASE_DRIVER).getDeclaredConstructor().newInstance();
 		DatabaseFactory.getInstance().getConnection().close();
-		LoginDatabaseFactory.getInstance().getConnection().close();
-		printSection("Loading Protection Configuration");
 		IdFactory idFactory = IdFactory.getInstance();
 		if (!idFactory.isInitialized())
 		{
@@ -351,8 +344,8 @@ public class GameServer
 		printSection("Masterio Pack");
 		RPSConfig.load();
 		printSection("Merge System Loaded");
-		DataMerge.getInstance();
-		ClanDataMerge.getInstance();
+//		DataMerge.getInstance();
+//		ClanDataMerge.getInstance();
 		Scripts.getInstance().init();
 		_log.info("===============[Spawn Manager]==================");
 		SpawnManager.getInstance().spawnAll();
@@ -523,22 +516,22 @@ public class GameServer
 		CompletedTasksHistory.getInstance();
 		ActionsExtractingManager.getInstance().load();
 		FacebookAutoAnnouncement.load();
-		if (ConfigHolder.getBool("AllowStreamingAFKSystem") && ConfigHolder.getInt("StreamingAFKSystemDelayBetweenMsgs") > 0)
-		{
-			AFKStreamersHandler.getInstance();
-			printSection("Loaded Stream System");
-		}
+//		if (ConfigHolder.getBool("AllowStreamingAFKSystem") && ConfigHolder.getInt("StreamingAFKSystemDelayBetweenMsgs") > 0)
+//		{
+//			AFKStreamersHandler.getInstance();
+//			printSection("Loaded Stream System");
+//		}
 
 		if (ConfigHolder.getBool("AllowStreamingSystem") && ConfigHolder.getLong("StreamCheckTwitchDelay") > 0)
 		{
 			TwitchParser.getInstance();
 		}
 
-		if (ConfigHolder.getBool("AllowForum"))
-		{
-			_log.info("===============[Forum]==================");
-			ForumDatabaseHandler.getInstance();
-		}
+//		if (ConfigHolder.getBool("AllowForum"))
+//		{
+//			_log.info("===============[Forum]==================");
+//			ForumDatabaseHandler.getInstance();
+//		}
 		ProxiesParser.getInstance().load();
 		printSection("Loaded Proxy System");
 		DonationReader.getInstance();

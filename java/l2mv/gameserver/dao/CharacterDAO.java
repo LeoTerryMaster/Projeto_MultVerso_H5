@@ -12,10 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import l2mv.gameserver.Config;
-import l2mv.gameserver.ConfigHolder;
 import l2mv.gameserver.database.DatabaseFactory;
 import l2mv.gameserver.database.mysql;
-import l2mv.gameserver.database.merge.MergeDatabaseFactory;
 import l2mv.gameserver.model.GameObjectsStorage;
 import l2mv.gameserver.model.Player;
 import l2mv.gameserver.utils.Language;
@@ -528,31 +526,31 @@ public class CharacterDAO
 			_log.error("Error while checking If name(" + name + ") already exists!", e);
 		}
 
-		if (ConfigHolder.getBool("EnableMerge"))
-		{
-			try (Connection con = MergeDatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("SELECT COUNT(old_login) FROM merge_data WHERE finished=0 AND new_char_name_1 = ? OR new_char_name_2 = ? OR new_char_name_3 = ? OR new_char_name_4 = ? OR new_char_name_5 = ? OR new_char_name_6 = ? OR new_char_name_7 = ? OR new_char_name_8 = ?"))
-			{
-				statement.setString(1, name);
-				statement.setString(2, name);
-				statement.setString(3, name);
-				statement.setString(4, name);
-				statement.setString(5, name);
-				statement.setString(6, name);
-				statement.setString(7, name);
-				statement.setString(8, name);
-				try (ResultSet rset = statement.executeQuery())
-				{
-					if (rset.next() && rset.getInt(1) > 0)
-					{
-						return true;
-					}
-				}
-			}
-			catch (SQLException e)
-			{
-				_log.error("Error checking if Char Name(" + name + ") exists in merge_data", e);
-			}
-		}
+//		if (ConfigHolder.getBool("EnableMerge"))
+//		{
+//			try (Connection con = MergeDatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("SELECT COUNT(old_login) FROM merge_data WHERE finished=0 AND new_char_name_1 = ? OR new_char_name_2 = ? OR new_char_name_3 = ? OR new_char_name_4 = ? OR new_char_name_5 = ? OR new_char_name_6 = ? OR new_char_name_7 = ? OR new_char_name_8 = ?"))
+//			{
+//				statement.setString(1, name);
+//				statement.setString(2, name);
+//				statement.setString(3, name);
+//				statement.setString(4, name);
+//				statement.setString(5, name);
+//				statement.setString(6, name);
+//				statement.setString(7, name);
+//				statement.setString(8, name);
+//				try (ResultSet rset = statement.executeQuery())
+//				{
+//					if (rset.next() && rset.getInt(1) > 0)
+//					{
+//						return true;
+//					}
+//				}
+//			}
+//			catch (SQLException e)
+//			{
+//				_log.error("Error checking if Char Name(" + name + ") exists in merge_data", e);
+//			}
+//		}
 		return false;
 	}
 

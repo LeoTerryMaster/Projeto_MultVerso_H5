@@ -1,10 +1,8 @@
 package l2mv.gameserver.network.loginservercon.lspackets;
 
 import l2mv.gameserver.Config;
-import l2mv.gameserver.ConfigHolder;
 import l2mv.gameserver.cache.Msg;
 import l2mv.gameserver.dao.AccountBonusDAO;
-import l2mv.gameserver.database.merge.DataMerge;
 import l2mv.gameserver.model.Player;
 import l2mv.gameserver.model.actor.instances.player.Bonus;
 import l2mv.gameserver.network.GameClient;
@@ -77,10 +75,10 @@ public class PlayerAuthResponse extends ReceivablePacket
 			client.setBonusExpire(this.bonusExpire);
 			client.setServerId(this._serverId);
 
-			if (ConfigHolder.getBool("EnableMerge"))
-			{
-				DataMerge.getInstance().checkMergeToComplete(this.account);
-			}
+//			if (ConfigHolder.getBool("EnableMerge"))
+//			{
+//				DataMerge.getInstance().checkMergeToComplete(this.account);
+//			}
 
 			GameClient oldClient = AuthServerCommunication.getInstance().addAuthedClient(client);
 			if (oldClient != null)

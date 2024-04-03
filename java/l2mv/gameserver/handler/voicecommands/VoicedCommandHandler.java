@@ -36,7 +36,6 @@ import l2mv.gameserver.handler.voicecommands.impl.RuVotePanel;
 import l2mv.gameserver.handler.voicecommands.impl.Security;
 import l2mv.gameserver.handler.voicecommands.impl.ServerInfo;
 import l2mv.gameserver.handler.voicecommands.impl.SiegeVoice;
-import l2mv.gameserver.handler.voicecommands.impl.StreamVoice;
 import l2mv.gameserver.handler.voicecommands.impl.Teleport;
 import l2mv.gameserver.handler.voicecommands.impl.TournamentVoice;
 import l2mv.gameserver.handler.voicecommands.impl.VoiceGmEvent;
@@ -100,7 +99,6 @@ public class VoicedCommandHandler extends AbstractHolder
 		registerVoicedCommandHandler(new VoiceGmEvent());
 		registerVoicedCommandHandler(new ACP());
 		registerVoicedCommandHandler(new ItemLogsVoice());
-		registerVoicedCommandHandler(new StreamVoice());
 		registerVoicedCommandHandler(new FacebookVoice());
 		registerVoicedCommandHandler(new DressMe());
 		registerVoicedCommandHandler(new VoteReward());

@@ -14,9 +14,6 @@ import l2mv.commons.time.cron.SchedulingPattern;
 import l2mv.commons.time.cron.SchedulingPattern.InvalidPatternException;
 import l2mv.gameserver.dao.DatabaseBackupManager;
 import l2mv.gameserver.database.DatabaseFactory;
-import l2mv.gameserver.database.ForumDatabaseFactory;
-import l2mv.gameserver.database.merge.MergeDatabaseFactory;
-import l2mv.gameserver.multverso.streaming.StreamDatabaseHandler;
 import l2mv.gameserver.hwid.HwidEngine;
 import l2mv.gameserver.instancemanager.CoupleManager;
 import l2mv.gameserver.instancemanager.CursedWeaponsManager;
@@ -207,13 +204,9 @@ public class Shutdown extends Thread
 		try
 		{
 			_log.info("Shutting down database communication...");
-			DatabaseFactory.getInstance().shutdown();
-			MergeDatabaseFactory.getInstance().shutdown();
-			ForumDatabaseFactory.getInstance().shutdown();
-		}
-		catch (SQLException e)
-		{
-			_log.error("Error while closing DatabaseFactory! ", e);
+			DatabaseFactory.getInstance().close();
+//			MergeDatabaseFactory.getInstance().shutdown();
+//			ForumDatabaseFactory.getInstance().shutdown();
 		}
 		catch (Exception e)
 		{
@@ -329,15 +322,7 @@ public class Shutdown extends Thread
 			_log.error("Error while saving HWID data! ", e);
 		}
 
-		try
-		{
-			StreamDatabaseHandler.saveRewardTimes();
-			_log.info("All stream reward times saved");
-		}
-		catch (RuntimeException e)
-		{
-			_log.error("Error while saving Stream reward times! ", e);
-		}
+		
 
 		if (Config.ALLOW_CURSED_WEAPONS)
 		{

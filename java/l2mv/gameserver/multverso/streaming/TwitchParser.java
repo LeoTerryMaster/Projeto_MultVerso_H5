@@ -85,7 +85,7 @@ public class TwitchParser
 							{
 								final String channelName = channel.getString("display_name");
 								final String streamTitle = channel.getString("status");
-								StreamsHolder.getInstance().onStreamActive(channelName, gameName, streamTitle, viewersCount, currentDate, _delayBetweenChecks);
+//								StreamsHolder.getInstance().onStreamActive(channelName, gameName, streamTitle, viewersCount, currentDate, _delayBetweenChecks);
 							}
 						}
 						catch (JSONException e)

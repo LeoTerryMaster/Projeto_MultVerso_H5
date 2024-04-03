@@ -467,17 +467,20 @@ public class Config
 		Config.MAXIMUM_ONLINE_USERS = serverSettings.getProperty("MaximumOnlineUsers", 3000);
 		Config.ONLINE_PLUS = serverSettings.getProperty("OnlineUsersPlus", 1);
 
-		Config.DATABASE_DRIVER = serverSettings.getProperty("Driver", "com.mysql.jdbc.Driver");
+		
+		
+		
+
 		Config.DATABASE_MAX_CONNECTIONS = serverSettings.getProperty("MaximumDbConnections", 10);
 		Config.DATABASE_MAX_IDLE_TIMEOUT = serverSettings.getProperty("MaxIdleConnectionTimeout", 600);
 		Config.DATABASE_IDLE_TEST_PERIOD = serverSettings.getProperty("IdleConnectionTestPeriod", 60);
 
-		Config.DATABASE_GAME_URL = serverSettings.getProperty("GameURL", "jdbc:mysql://localhost/l2jdb");
+		Config.DATABASE_DRIVER = serverSettings.getProperty("dataSourceClassName", "com.mariadb.jdbc.Driver");
+		Config.DATABASE_GAME_URL = serverSettings.getProperty("GameURL", "jdbc:mariadb://localhost/l2jdb");
 		Config.DATABASE_GAME_USER = serverSettings.getProperty("GameUser", "root");
 		Config.DATABASE_GAME_PASSWORD = serverSettings.getProperty("GamePassword", "");
-		Config.DATABASE_LOGIN_URL = serverSettings.getProperty("LoginURL", "jdbc:mysql://localhost/l2jdb");
-		Config.DATABASE_LOGIN_USER = serverSettings.getProperty("LoginUser", "root");
-		Config.DATABASE_LOGIN_PASSWORD = serverSettings.getProperty("LoginPassword", "");
+		
+		
 		Config.MYSQL_DUMP_PATH = serverSettings.getProperty("MySqlDumpPath", "");
 		Config.USER_INFO_INTERVAL = serverSettings.getProperty("UserInfoInterval", 100L);
 		Config.BROADCAST_STATS_INTERVAL = serverSettings.getProperty("BroadcastStatsInterval", true);

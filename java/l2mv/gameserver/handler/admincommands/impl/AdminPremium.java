@@ -13,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import l2mv.gameserver.Config;
 import l2mv.gameserver.data.xml.holder.PremiumHolder;
 import l2mv.gameserver.database.DatabaseFactory;
-import l2mv.gameserver.database.LoginDatabaseFactory;
 import l2mv.gameserver.handler.admincommands.IAdminCommandHandler;
 import l2mv.gameserver.model.GameObjectsStorage;
 import l2mv.gameserver.model.Player;
@@ -170,7 +169,7 @@ public class AdminPremium implements IAdminCommandHandler
 
 			// First we must get all the account names from the db
 			final List<String> accounts = new ArrayList<>();
-			try (Connection con = LoginDatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("SELECT login FROM accounts"); ResultSet rset = statement.executeQuery())
+			try (Connection con = DatabaseFactory.getInstance().getConnection(); PreparedStatement statement = con.prepareStatement("SELECT login FROM accounts"); ResultSet rset = statement.executeQuery())
 			{
 				while (rset.next())
 				{
