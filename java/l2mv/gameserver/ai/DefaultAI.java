@@ -1,18 +1,5 @@
 package l2mv.gameserver.ai;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.ScheduledFuture;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import l2mv.commons.lang.reference.HardReference;
 import l2mv.commons.math.random.RndSelector;
 import l2mv.commons.threading.RunnableImpl;
@@ -22,13 +9,7 @@ import l2mv.gameserver.ThreadPoolManager;
 import l2mv.gameserver.data.xml.holder.NpcHolder;
 import l2mv.gameserver.geodata.GeoEngine;
 import l2mv.gameserver.model.AggroList.AggroInfo;
-import l2mv.gameserver.model.Creature;
-import l2mv.gameserver.model.MinionList;
-import l2mv.gameserver.model.Playable;
-import l2mv.gameserver.model.Player;
-import l2mv.gameserver.model.Skill;
-import l2mv.gameserver.model.World;
-import l2mv.gameserver.model.WorldRegion;
+import l2mv.gameserver.model.*;
 import l2mv.gameserver.model.entity.SevenSigns;
 import l2mv.gameserver.model.instances.MinionInstance;
 import l2mv.gameserver.model.instances.MonsterInstance;
@@ -43,13 +24,19 @@ import l2mv.gameserver.stats.conditions.Condition;
 import l2mv.gameserver.taskmanager.AiTaskManager;
 import l2mv.gameserver.utils.Location;
 import l2mv.gameserver.utils.NpcUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.ScheduledFuture;
 
 public class DefaultAI extends CharacterAI
 {
 	protected static final Logger _log = LoggerFactory.getLogger(DefaultAI.class);
 	public static String namechar;
 
-	public static enum TaskType
+	public enum TaskType
 	{
 		MOVE, INTERACT, ATTACK, CAST, BUFF
 	}
@@ -130,7 +117,7 @@ public class DefaultAI extends CharacterAI
 	{
 		private static final Comparator<Task> instance = new TaskComparator();
 
-		public static final Comparator<Task> getInstance()
+		public static Comparator<Task> getInstance()
 		{
 			return instance;
 		}
@@ -194,7 +181,7 @@ public class DefaultAI extends CharacterAI
 		}
 	}
 
-	protected class NearestTargetComparator implements Comparator<Creature>
+	protected static class NearestTargetComparator implements Comparator<Creature>
 	{
 		private final Creature actor;
 
@@ -223,6 +210,8 @@ public class DefaultAI extends CharacterAI
 	protected int MAX_Z_AGGRO_RANGE = 200;
 
 	protected ScheduledFuture<?> _aiTask;
+	private long aiTaskDelayCurrent;
+	private long lastActiveCheck;
 
 	protected ScheduledFuture<?> _runningTask;
 	protected ScheduledFuture<?> _madnessTask;
@@ -241,7 +230,7 @@ public class DefaultAI extends CharacterAI
 	/** Список заданий */
 	protected final NavigableSet<Task> _tasks = new ConcurrentSkipListSet<>(TaskComparator.getInstance());
 
-	protected final Skill[] _damSkills, _dotSkills, _debuffSkills, _healSkills, _buffSkills, _stunSkills;
+	protected Skill[] _damSkills, _dotSkills, _debuffSkills, _healSkills, _buffSkills, _stunSkills;
 
 	protected long _lastActiveCheck;
 	protected long _checkAggroTimestamp = 0;
@@ -253,42 +242,63 @@ public class DefaultAI extends CharacterAI
 
 	protected final Comparator<Creature> _nearestTargetComparator;
 
-	public DefaultAI(NpcInstance actor)
-	{
+	/**
+	 * The DefaultAI class is responsible for controlling the behavior of a non-playable character (NPC).
+	 * This class extends the AI class and provides default implementation for the AI behavior.
+	 */
+	public DefaultAI(NpcInstance actor) {
 		super(actor);
-
 		setAttackTimeout(Long.MAX_VALUE);
+		initializeSkills(actor);
+		_nearestTargetComparator = new NearestTargetComparator(actor);
+		initializeParameters(actor);
+	}
 
-		NpcInstance npc = getActor();
+	/**
+	 * Initializes the skills of the given NPC.
+	 *
+	 * @param npc the NPC instance whose skills are to be initialized
+	 */
+	private void initializeSkills(NpcInstance npc) {
 		_damSkills = npc.getTemplate().getDamageSkills();
 		_dotSkills = npc.getTemplate().getDotSkills();
 		_debuffSkills = npc.getTemplate().getDebuffSkills();
 		_buffSkills = npc.getTemplate().getBuffSkills();
 		_stunSkills = npc.getTemplate().getStunSkills();
 		_healSkills = npc.getTemplate().getHealSkills();
+	}
 
-		_nearestTargetComparator = new NearestTargetComparator(actor);
-
-		// Preload some AI params
-		MAX_PURSUE_RANGE = actor.getParameter("MaxPursueRange", actor.isRaid() ? Config.MAX_PURSUE_RANGE_RAID : npc.isUnderground() ? Config.MAX_PURSUE_UNDERGROUND_RANGE : Config.MAX_PURSUE_RANGE);
+	/**
+	 * Initializes parameters for the given NPC actor.
+	 *
+	 * @param actor the NPC actor to initialize parameters for
+	 */
+	private void initializeParameters(NpcInstance actor) {
+		MAX_PURSUE_RANGE = actor.getParameter(
+				"MaxPursueRange",
+				actor.isRaid() ? Config.MAX_PURSUE_RANGE_RAID
+						: actor.isUnderground() ? Config.MAX_PURSUE_UNDERGROUND_RANGE
+						: Config.MAX_PURSUE_RANGE
+		);
 		_minFactionNotifyInterval = actor.getParameter("FactionNotifyInterval", 10000);
 	}
 
+	/**
+	 * Method to execute the main logic of the AI task.
+	 * Checks if the AI task is valid, if not, the method returns.
+	 * If active status needs to be checked, the last active check timestamp is updated and if the actor is not in the active region,
+	 * the AI task is stopped and the method returns.
+	 * Finally, the onEvtThink method is called to execute the logic for the AI task.
+	 */
 	@Override
-	public void runImpl()
-	{
-		if ((_aiTask == null) || (!Config.ALLOW_NPC_AIS && (getActor() == null || !getActor().isPlayable())))
-		{
+	public void runImpl() {
+		if (isAiTaskInvalid()) {
 			return;
 		}
-		// проверяем, если NPC вышел в неактивный регион, отключаем AI
-		if (!isGlobalAI() && ((System.currentTimeMillis() - _lastActiveCheck) > 60000L))
-		{
-			_lastActiveCheck = System.currentTimeMillis();
-			NpcInstance actor = getActor();
-			WorldRegion region = actor == null ? null : actor.getCurrentRegion();
-			if ((region == null) || !region.isActive())
-			{
+
+		if (shouldCheckActiveStatus()) {
+			lastActiveCheck = System.currentTimeMillis();
+			if (!isActorInActiveRegion()) {
 				stopAITask();
 				return;
 			}
@@ -296,162 +306,271 @@ public class DefaultAI extends CharacterAI
 		onEvtThink();
 	}
 
+	/**
+	 * Checks if the AI task is invalid.
+	 *
+	 * @return {@code true} if the AI task is invalid, {@code false} otherwise.
+	 */
+	private boolean isAiTaskInvalid() {
+		return _aiTask == null || (!Config.ALLOW_NPC_AIS && (getActor() == null || !getActor().isPlayable()));
+	}
+
+	/**
+	 * Determines if the active status should be checked.
+	 *
+	 * @return true if the active status should be checked, false otherwise.
+	 */
+	private boolean shouldCheckActiveStatus() {
+		return !isGlobalAI() && (System.currentTimeMillis() - lastActiveCheck) > 60000L;
+	}
+
+	/**
+	 * Checks if the actor is in an active region.
+	 *
+	 * @return {@code true} if the actor is in an active region, {@code false} otherwise.
+	 */
+	private boolean isActorInActiveRegion() {
+		NpcInstance actor = getActor();
+		WorldRegion region = (actor == null) ? null : actor.getCurrentRegion();
+		return region != null && region.isActive();
+	}
+
+	/**
+	 * Starts the AI task.
+	 *
+	 * If the AI task is not already running, this method schedules the task to start after a delay and sets the delay to the default AI task active delay.
+	 *
+	 * @throws IllegalStateException if the AI task is already running.
+	 */
 	@Override
-	public synchronized void startAITask()
-	{
-		if (_aiTask == null)
-		{
-			AI_TASK_DELAY_CURRENT = AI_TASK_ACTIVE_DELAY;
-			_aiTask = AiTaskManager.getInstance().scheduleAtFixedRate(this, 0L, AI_TASK_DELAY_CURRENT);
+	public synchronized void startAITask() {
+		if (_aiTask == null) {
+			aiTaskDelayCurrent = AI_TASK_ACTIVE_DELAY;
+			scheduleAiTask();
 		}
 	}
 
-	protected synchronized void switchAITask(long NEW_DELAY)
-	{
-		if (_aiTask == null)
-		{
-			return;
-		}
-
-		if (AI_TASK_DELAY_CURRENT != NEW_DELAY)
-		{
+	/**
+	 * Switches the AI task with a new delay.
+	 *
+	 * @param newDelay the new delay for the AI task
+	 */
+	protected synchronized void switchAITask(long newDelay) {
+		if (_aiTask != null && aiTaskDelayCurrent != newDelay) {
 			_aiTask.cancel(false);
-			AI_TASK_DELAY_CURRENT = NEW_DELAY;
-			_aiTask = AiTaskManager.getInstance().scheduleAtFixedRate(this, 0L, AI_TASK_DELAY_CURRENT);
+			aiTaskDelayCurrent = newDelay;
+			scheduleAiTask();
 		}
 	}
 
+	/**
+	 * Schedules an AI task to be executed periodically.
+	 *
+	 * This method schedules the execution of an AI task using the AiTaskManager singleton
+	 * instance. The task will be executed at a fixed rate, as specified by the aiTaskDelayCurrent
+	 * parameter.
+	 *
+	 * @see AiTaskManager
+	 */
+	private void scheduleAiTask() {
+		_aiTask = AiTaskManager.getInstance().scheduleAtFixedRate(this, 0L, aiTaskDelayCurrent);
+	}
+
+	/**
+	 * Stops the AI task.
+	 *
+	 * This method cancels the currently running AI task if it exists. Once the AI task is cancelled, it is set to null.
+	 * Subsequent calls to this method will have no effect if there is no AI task currently running.
+	 *
+	 * Note: This method is thread safe and synchronized to prevent any concurrent modification issues.
+	 */
 	@Override
-	public final synchronized void stopAITask()
-	{
-		if (_aiTask != null)
-		{
+	public final synchronized void stopAITask() {
+		if (_aiTask != null) {
 			_aiTask.cancel(false);
 			_aiTask = null;
 		}
 	}
 
 	/**
-	 * Определяет, может ли этот тип АИ видеть персонажей в режиме Silent Move.
-	 * @param target L2Playable цель
-	 * @return true если цель видна в режиме Silent Move
+	 * Checks if the actor can see the given target in silent move.
+	 *
+	 * @param target The target Playable object being checked.
+	 * @return true if the actor can see the target in silent move, false otherwise.
 	 */
-	protected boolean canSeeInSilentMove(Playable target)
-	{
-		if (getActor().getParameter("canSeeInSilentMove", false))
-		{
-			return true;
-		}
-		return !target.isSilentMoving();
+	protected boolean canSeeInSilentMove(Playable target) {
+		return getActor().getParameter("canSeeInSilentMove", false) || !target.isSilentMoving();
 	}
 
-	protected boolean canSeeInHide(Playable target)
-	{
-		if (getActor().getParameter("canSeeInHide", false))
-		{
-			return true;
-		}
-
-		return !target.isInvisible();
+	/**
+	 * Determines if the current actor can see the target even if the target is hidden.
+	 *
+	 * @param target the Playable entity that is being checked for visibility
+	 * @return true if the current actor can see the target, false otherwise
+	 */
+	protected boolean canSeeInHide(Playable target) {
+		return getActor().getParameter("canSeeInHide", false) || !target.isInvisible();
 	}
 
-	protected boolean checkAggression(Creature target)
-	{
+	/**
+	 * Checks if the given target creature exhibits aggression.
+	 *
+	 * @param target the creature to check for aggression
+	 * @return true if the target creature exhibits aggression, false otherwise
+	 */
+	protected boolean checkAggression(Creature target) {
 		return checkAggression(target, false);
 	}
 
-	protected boolean checkAggression(Creature target, boolean avoidAttack)
-	{
+	/**
+	 * Checks if the given target can be attacked by the creature.
+	 *
+	 * @param target the target to check
+	 * @param avoidAttack whether to avoid attacking the target or not
+	 * @return true if the target can be attacked, false otherwise
+	 */
+	protected boolean checkAggression(Creature target, boolean avoidAttack) {
 		NpcInstance actor = getActor();
-		if ((getIntention() != CtrlIntention.AI_INTENTION_ACTIVE) || !isGlobalAggro() || target.isAlikeDead())
-		{
+		if (isInvalidAggressionTarget(target)) {
 			return false;
 		}
 
-		if (target.isNpc() && target.isInvul())
-		{
+		if (isTargetProtected(target)) {
 			return false;
 		}
 
-		if (target.isPlayer() && (target.getPlayer().isInAwayingMode()) && (!Config.AWAY_PLAYER_TAKE_AGGRO))
-		{
+		if (!isTargetInAggroRange(target)) {
 			return false;
 		}
 
-		if (target.isPlayable())
-		{
-			if (!canSeeInSilentMove((Playable) target) || !canSeeInHide((Playable) target) || (actor.getFaction().getName().equalsIgnoreCase("varka_silenos_clan") && (target.getPlayer().getVarka() > 0)))
-			{
-				return false;
-			}
-			if (actor.getFaction().getName().equalsIgnoreCase("ketra_orc_clan") && (target.getPlayer().getKetra() > 0))
-			{
-				return false;
-			}
-			/*
-			 * if (target.isFollow && !target.isPlayer() && target.getFollowTarget() != null && target.getFollowTarget().isPlayer()) return;
-			 */
-			if ((target.isPlayer() && ((Player) target).isGM() && target.isInvisible()) || (((Playable) target).getNonAggroTime() > System.currentTimeMillis()))
-			{
-				return false;
-			}
-			if ((target.isPlayer() && !target.getPlayer().isActive()) || (actor.isMonster() && target.isInZonePeace()))
-			{
-				return false;
-			}
-		}
-
-		AggroInfo ai = actor.getAggroList().get(target);
-		if ((ai != null) && (ai.hate > 0))
-		{
-			if (!target.isInRangeZ(actor.getSpawnedLoc(), MAX_PURSUE_RANGE))
-			{
-				return false;
-			}
-		}
-		else if (!actor.isAggressive() || !target.isInRangeZ(actor.getSpawnedLoc(), actor.getAggroRange()))
-		{
+		if (!target.isPlayable() || !GeoEngine.canSeeTarget(actor, target, false)) {
 			return false;
 		}
 
-		if (!canAttackCharacter(target) || !GeoEngine.canSeeTarget(actor, target, false))
-		{
-			return false;
-		}
-
-		// Prims - Posibility to call checkAggresion as a check without action
-		if (!avoidAttack)
-		{
-			actor.getAggroList().addDamageHate(target, 0, 2);
-
-			if ((target.isSummon() || target.isPet()))
-			{
-				actor.getAggroList().addDamageHate(target.getPlayer(), 0, 1);
-			}
-
-			startRunningTask(AI_TASK_ATTACK_DELAY);
-			setIntention(CtrlIntention.AI_INTENTION_ATTACK, target);
+		if (!avoidAttack) {
+			engageTarget(target);
 		}
 
 		return true;
 	}
 
-	protected void setIsInRandomAnimation(long time)
-	{
+	/**
+	 * Checks if the given Creature is an invalid aggression target.
+	 *
+	 * @param target the Creature to check
+	 * @return true if the Creature is an invalid aggression target, false otherwise.
+	 */
+	private boolean isInvalidAggressionTarget(Creature target) {
+		return getIntention() != CtrlIntention.AI_INTENTION_ACTIVE || !isGlobalAggro() || target.isAlikeDead();
+	}
+
+	/**
+	 * Checks if the given target is protected.
+	 *
+	 * @param target The creature to check.
+	 * @return {@code true} if the target is protected, {@code false} otherwise.
+	 */
+	private boolean isTargetProtected(Creature target) {
+		if (target.isNpc() && target.isInvul()) {
+			return true;
+		}
+
+		if (target.isPlayer() && target.getPlayer().isInAwayingMode() && !Config.AWAY_PLAYER_TAKE_AGGRO) {
+			return true;
+		}
+
+		if (target.isPlayable()) {
+			if (!canSeeInSilentMove((Playable) target) || !canSeeInHide((Playable) target)) {
+				return true;
+			}
+			return isFactionProtected(target);
+		}
+
+		return false;
+	}
+
+	/**
+	 * Checks if a given creature is protected by a faction.
+	 *
+	 * @param target the creature to be checked for faction protection
+	 * @return true if the creature is protected by a faction, false otherwise
+	 */
+	private boolean isFactionProtected(Creature target) {
+		NpcInstance actor = getActor();
+		Player player = target.getPlayer();
+		if (actor.getFaction().getName().equalsIgnoreCase("varka_silenos_clan") && player.getVarka() > 0) {
+			return true;
+		}
+
+		if (actor.getFaction().getName().equalsIgnoreCase("ketra_orc_clan") && player.getKetra() > 0) {
+			return true;
+		}
+
+		return (player.isGM() && target.isInvisible()) || (((Playable) target).getNonAggroTime() > System.currentTimeMillis()) ||
+				(!player.isActive() || (actor.isMonster() && target.isInZonePeace()));
+	}
+
+	/**
+	 * Checks if the target creature falls within the aggro range of the actor.
+	 *
+	 * @param target the target creature
+	 * @return true if the target is within the aggro range, false otherwise
+	 */
+	private boolean isTargetInAggroRange(Creature target) {
+		NpcInstance actor = getActor();
+		AggroInfo ai = actor.getAggroList().get(target);
+
+		if (ai != null && ai.hate > 0) {
+			return target.isInRangeZ(actor.getSpawnedLoc(), MAX_PURSUE_RANGE);
+		}
+
+		return actor.isAggressive() && target.isInRangeZ(actor.getSpawnedLoc(), actor.getAggroRange());
+	}
+
+	/**
+	 * Engages a target for attack.
+	 *
+	 * This method is responsible for engaging a target Creature for attack. It adds the target to the actor's aggro list
+	 * with an initial hate value of 0 and a weight of 2. If the target is a summon or pet, it also adds the target's player
+	 * to the aggro list with an initial hate value of 0 and a weight of 1. It then starts a running task with a delay
+	 * specified by the AI_TASK_ATTACK_DELAY constant. Finally, it sets the AI's intention to attack the target.
+	 *
+	 * @param target the target Creature to engage
+	 */
+	private void engageTarget(Creature target) {
+		NpcInstance actor = getActor();
+		actor.getAggroList().addDamageHate(target, 0, 2);
+
+		if (target.isSummon() || target.isPet()) {
+			actor.getAggroList().addDamageHate(target.getPlayer(), 0, 1);
+		}
+
+		startRunningTask(AI_TASK_ATTACK_DELAY);
+		setIntention(CtrlIntention.AI_INTENTION_ATTACK, target);
+	}
+
+	/**
+	 * Sets the flag indicating if the object is in a random animation.
+	 *
+	 * @param time the duration of the random animation in milliseconds
+	 */
+	protected void setIsInRandomAnimation(long time) {
 		_randomAnimationEnd = System.currentTimeMillis() + time;
 	}
 
-	protected boolean randomAnimation()
-	{
+	/**
+	 * Generates a random animation for the NPC actor.
+	 *
+	 * @return true if a random animation is successfully generated, false otherwise.
+	 */
+	protected boolean randomAnimation() {
 		NpcInstance actor = getActor();
 
-		if (actor.getParameter("noRandomAnimation", false))
-		{
+		if (actor.getParameter("noRandomAnimation", false)) {
 			return false;
 		}
 
-		if (actor.hasRandomAnimation() && !actor.isActionsDisabled() && !actor.isMoving && !actor.isInCombat() && Rnd.chance(Config.RND_ANIMATION_RATE))
-		{
+		if (actor.hasRandomAnimation() && !actor.isActionsDisabled() && !actor.isMoving() && !actor.isInCombat() && Rnd.chance(Config.RND_ANIMATION_RATE)) {
 			setIsInRandomAnimation(3000);
 			actor.onRandomAnimation();
 			return true;
@@ -459,214 +578,184 @@ public class DefaultAI extends CharacterAI
 		return false;
 	}
 
-	protected boolean randomWalk()
-	{
+	/**
+	 * This method performs a random walk for an NPC.
+	 *
+	 * @return boolean - Returns true if the random walk was performed successfully, otherwise false.
+	 */
+	protected boolean randomWalk() {
 		NpcInstance actor = getActor();
 
-		if (actor.getParameter("noRandomWalk", false))
-		{
+		if (actor.getParameter("noRandomWalk", false)) {
 			return false;
 		}
 
-		return !actor.isMoving && maybeMoveToHome();
+		return !actor.isMoving() && maybeMoveToHome();
 	}
 
 	/**
-	 * @return true если действие выполнено, false если нет
+	 * Determines the next action for the active Non-Player Character (NPC).
+	 *
+	 * @return true if the NPC should continue thinking and performing actions, false otherwise
 	 */
-	protected boolean thinkActive()
-	{
+	protected boolean thinkActive() {
 		NpcInstance actor = getActor();
-		if (actor.isActionsDisabled() || (_randomAnimationEnd > System.currentTimeMillis()))
-		{
+		if (actor.isActionsDisabled() || (_randomAnimationEnd > System.currentTimeMillis())) {
 			return true;
 		}
 
-		if (_def_think)
-		{
-			if (doTask())
-			{
+		if (_def_think) {
+			if (doTask()) {
 				clearTasks();
 			}
 			return true;
 		}
 
+		if (checkAggroConditions(actor)) {
+			return true;
+		}
+
+		if (actor.isMinion()) {
+			return handleMinionMovement(actor);
+		}
+
+		return randomAnimation() || randomWalk();
+	}
+
+	/**
+	 * Checks the aggro conditions for a given NPC instance.
+	 *
+	 * @param actor the NPC instance to check the aggro conditions for
+	 * @return true if the NPC should become aggressive, false otherwise
+	 */
+	private boolean checkAggroConditions(NpcInstance actor) {
 		long now = System.currentTimeMillis();
-		if ((now - _checkAggroTimestamp) > Config.AGGRO_CHECK_INTERVAL)
-		{
+		if ((now - _checkAggroTimestamp) > Config.AGGRO_CHECK_INTERVAL) {
 			_checkAggroTimestamp = now;
 
 			boolean aggressive = Rnd.chance(actor.getParameter("SelfAggressive", actor.isAggressive() ? 100 : 0));
-			if (!actor.getAggroList().isEmpty() || aggressive)
-			{
-				/*
-				 * Prims - Changed completely the logic. Now we get the surroundings, then check the aggresion of everyone and make a final list of possible targets
-				 * We call checkAggresion but without action, only checking, then if aggrolist is not empty then we sort it by distance and do the attack
-				 * If done otherwise, the performance drop is huge
-				 */
-				final List<Creature> knowns = World.getAroundCharacters(actor);
-				if (!knowns.isEmpty())
-				{
-					final List<Creature> aggroList = new ArrayList<>();
-
-					for (Creature cha : knowns)
-					{
-						if (aggressive || (actor.getAggroList().get(cha) != null))
-						{
-							if (checkAggression(cha, true))
-							{
-								aggroList.add(cha);
-							}
-						}
-					}
-
-					if (actor.isDead())
-					{
-						return true;
-					}
-
-					// Only sort if there is actually a target to attack
-					if (!aggroList.isEmpty())
-					{
-						Collections.sort(aggroList, _nearestTargetComparator);
-
-						for (Creature target : aggroList)
-						{
-							if (target == null || target.isAlikeDead())
-							{
-								continue;
-							}
-
-							/*
-							 * actor.getAggroList().addDamageHate(target, 0, 2);
-							 * if ((target.isSummon() || target.isPet()))
-							 * {
-							 * actor.getAggroList().addDamageHate(target.getPlayer(), 0, 1);
-							 * }
-							 * startRunningTask(AI_TASK_ATTACK_DELAY);
-							 * setIntention(CtrlIntention.AI_INTENTION_ATTACK, target);
-							 */
-							if (checkAggression(target, false))
-							{
-								return true;
-							}
-						}
-					}
-				}
+			if (!actor.getAggroList().isEmpty() || aggressive) {
+				return evaluateSurroundingsForAggression(actor, aggressive);
 			}
 		}
-
-		if (actor.isMinion())
-		{
-			MonsterInstance leader = ((MinionInstance) actor).getLeader();
-			if (leader != null)
-			{
-				double distance = actor.getDistance(leader.getX(), leader.getY());
-				if (distance > 1000)
-				{
-					actor.teleToLocation(leader.getMinionPosition());
-				}
-				else if (distance > 200)
-				{
-					addTaskMove(leader.getMinionPosition(), false);
-				}
-				return true;
-			}
-		}
-
-		if (randomAnimation() || randomWalk())
-		{
-			return true;
-		}
-
 		return false;
 	}
 
-	@Override
-	protected void onIntentionIdle()
-	{
-		NpcInstance actor = getActor();
+	/**
+	 * Evaluates the surroundings of an NPC to determine if it should exhibit aggression.
+	 *
+	 * @param actor The NPC instance
+	 * @param aggressive Determines if the actor is already aggressive or not
+	 * @return true if the NPC should exhibit aggression, false otherwise
+	 */
+	private boolean evaluateSurroundingsForAggression(NpcInstance actor, boolean aggressive) {
+		List<Creature> knowns = World.getAroundCharacters(actor);
+		if (!knowns.isEmpty()) {
+			List<Creature> aggroList = new ArrayList<>();
 
-		// Удаляем все задания
-		clearTasks();
+			for (Creature cha : knowns) {
+				if (aggressive || actor.getAggroList().get(cha) != null) {
+					if (checkAggression(cha, true)) {
+						aggroList.add(cha);
+					}
+				}
+			}
 
-		actor.stopMove();
-		actor.getAggroList().clear(true);
-		setAttackTimeout(Long.MAX_VALUE);
-		setAttackTarget(null);
-
-		changeIntention(CtrlIntention.AI_INTENTION_IDLE, null, null);
-	}
-
-	@Override
-	protected void onIntentionActive()
-	{
-		NpcInstance actor = getActor();
-
-		actor.stopMove();
-		setAttackTimeout(Long.MAX_VALUE);
-
-		if (getIntention() != CtrlIntention.AI_INTENTION_ACTIVE)
-		{
-			switchAITask(AI_TASK_ACTIVE_DELAY);
-			changeIntention(CtrlIntention.AI_INTENTION_ACTIVE, null, null);
+			if (!aggroList.isEmpty()) {
+				Creature target = selectTarget(aggroList);
+                return target != null && checkAggression(target, false);
+			}
 		}
-
-		onEvtThink();
+		return false;
 	}
 
-	@Override
-	protected void onIntentionAttack(Creature target)
-	{
-		NpcInstance actor = getActor();
-
-		// Removes all jobs
-		clearTasks();
-
-		actor.stopMove();
-		setAttackTarget(target);
-		setAttackTimeout(getMaxAttackTimeout() + System.currentTimeMillis());
-		setGlobalAggro(0);
-
-		if (getIntention() != CtrlIntention.AI_INTENTION_ATTACK)
-		{
-			changeIntention(CtrlIntention.AI_INTENTION_ATTACK, target, null);
-			switchAITask(AI_TASK_ATTACK_DELAY);
+	/**
+	 * Handles the movement of a minion NPC to its leader.
+	 * If the minion has a leader and its distance from the leader exceeds 1000 units,
+	 * the minion teleports to the leader's minion position.
+	 * If the minion has a leader and its distance from the leader exceeds 200 units
+	 * but is below or equal to 1000 units, the minion adds a task to move towards
+	 * the leader's minion position.
+	 *
+	 * @param actor the minion NPC instance
+	 * @return true if the minion movement is handled successfully, false otherwise
+	 */
+	private boolean handleMinionMovement(NpcInstance actor) {
+		MonsterInstance leader = ((MinionInstance) actor).getLeader();
+		if (leader != null) {
+			double distance = actor.getDistance(leader.getX(), leader.getY());
+			if (distance > 1000) {
+				actor.teleToLocation(leader.getMinionPosition());
+			} else if (distance > 200) {
+				addTaskMove(leader.getMinionPosition(), false);
+			}
+			return true;
 		}
-
-		onEvtThink();
+		return false;
 	}
 
-	protected boolean canAttackCharacter(Creature target)
-	{
-		return target.isPlayable();
+	/**
+	 * Evaluates the threat level of a given creature using heuristic.
+	 *
+	 * @param target the creature to evaluate the threat level for
+	 * @return the calculated threat level
+	 */
+	private double evaluateThreat(Creature target) {
+		double threatLevel = 0;
+		if (target.isPlayer()) {
+			Player player = (Player) target;
+			threatLevel += player.getLevel() * 1.5;
+			if (player.isGM()) {
+				threatLevel += 100;
+			}
+			if (player.isInParty()) {
+				threatLevel += player.getParty().getMemberCount() * 10;
+			}
+		}
+		if (target.isSummon() || target.isPet()) {
+			threatLevel += 50;
+		}
+		return threatLevel;
 	}
 
-	protected boolean checkTarget(Creature target, int range)
-	{
+	/**
+	 * Selects a target creature from the provided list based on the threat evaluation heuristic.
+	 *
+	 * @param aggroList the list of creatures to select a target from
+	 * @return the selected target creature or null if the list is empty
+	 */
+	protected Creature selectTarget(List<Creature> aggroList) {
+		return aggroList.stream()
+				.max(Comparator.comparingDouble(this::evaluateThreat))
+				.orElse(null);
+	}
+
+	/**
+	 * Checks if the given target is valid for attacking or not.
+	 *
+	 * @param target The target to be checked.
+	 * @param range The maximum range allowed for attacking the target.
+	 * @return True if the target is valid for attacking, false otherwise.
+	 */
+	protected boolean checkTarget(Creature target, int range) {
 		NpcInstance actor = getActor();
-		if ((target == null) || target.isAlikeDead() || !actor.isInRangeZ(target, range))
-		{
+		if (target == null || target.isAlikeDead() || !actor.isInRangeZ(target, range)) {
 			return false;
 		}
 
-		// если не видим чаров в хайде - не атакуем их
-		final boolean hided = target.isPlayable() && !canSeeInHide((Playable) target);
+		// se não podemos ver chars escondidos - não atacamos
+		final boolean hidden = target.isPlayable() && !canSeeInHide((Playable) target);
 
-		if (!hided && actor.isConfused())
-		{
+		if (!hidden && actor.isConfused()) {
 			return true;
 		}
 
-		// В состоянии атаки атакуем всех, на кого у нас есть хейт
-		if (getIntention() == CtrlIntention.AI_INTENTION_ATTACK)
-		{
+		// Em estado de ataque, atacamos todos com ódio
+		if (getIntention() == CtrlIntention.AI_INTENTION_ATTACK) {
 			AggroInfo ai = actor.getAggroList().get(target);
-			if (ai != null)
-			{
-				if (hided)
-				{
-					ai.hate = 0; // очищаем хейт
+			if (ai != null) {
+				if (hidden) {
+					ai.hate = 0; // limpa o ódio
 					return false;
 				}
 				return ai.hate > 0;
@@ -674,106 +763,147 @@ public class DefaultAI extends CharacterAI
 			return false;
 		}
 
-		return canAttackCharacter(target);
+		return target.isPlayable();
 	}
 
-	public void setAttackTimeout(long time)
-	{
+	/**
+	 * Sets the attack timeout for the application.
+	 *
+	 * @param time the time (in milliseconds) to set as the attack timeout
+	 */
+	public void setAttackTimeout(long time) {
 		_attackTimeout = time;
 	}
 
-	protected long getAttackTimeout()
-	{
+	/**
+	 * Retrieves the attack timeout value.
+	 *
+	 * @return The attack timeout in milliseconds.
+	 */
+	protected long getAttackTimeout() {
 		return _attackTimeout;
 	}
 
-	protected void thinkAttack()
-	{
+	/**
+	 * This method is responsible for determining the actions that an NPC should take when attacking.
+	 * It checks if the actor is dead, and if so, returns immediately.
+	 *
+	 * If the actor is not dead, it then checks if the actor is out of range of its spawned location.
+	 * If it is out of range, it teleports the actor back to its spawn location and returns.
+	 *
+	 * If the actor is within range, it then checks if the current task should be executed and
+	 * if the actor is not currently attacking or casting any skills.
+	 *
+	 * If the current task should be executed and the actor is not attacking or casting, it
+	 * then checks if a new task can be created. If a new task cannot be created, it
+	 * then checks if the attack timeout has been reached. If the attack timeout has been reached,
+	 * it returns the actor back to its home location.
+	 */
+	protected void thinkAttack() {
 		NpcInstance actor = getActor();
-		if (actor.isDead())
-		{
+		if (actor.isDead()) {
 			return;
 		}
 
 		Location loc = actor.getSpawnedLoc();
-		if (!actor.isInRange(loc, MAX_PURSUE_RANGE))
-		{
+		if (!actor.isInRange(loc, MAX_PURSUE_RANGE)) {
 			teleportHome();
 			return;
 		}
 
-		if (doTask() && !actor.isAttackingNow() && !actor.isCastingNow())
-		{
-			if (!createNewTask())
-			{
-				if (System.currentTimeMillis() > getAttackTimeout())
-				{
+		if (doTask() && !actor.isAttackingNow() && !actor.isCastingNow()) {
+			if (!createNewTask()) {
+				if (System.currentTimeMillis() > getAttackTimeout()) {
 					returnHome();
 				}
 			}
 		}
 	}
 
+	/**
+	 * Called when the NPC is spawned into the world.
+	 * Sets the global aggro time and sets the AI intention to active.
+	 */
 	@Override
-	protected void onEvtSpawn()
-	{
+	protected void onEvtSpawn() {
 		setGlobalAggro(System.currentTimeMillis() + getActor().getParameter("globalAggro", 10000L));
 
 		setIntention(CtrlIntention.AI_INTENTION_ACTIVE);
 	}
 
+	/**
+	 * This method is invoked when the object is ready to perform an action.
+	 * It calls the onEvtThink() method to trigger the thinking logic.
+	 *
+	 * @see #onEvtThink()
+	 */
 	@Override
-	protected void onEvtReadyToAct()
-	{
+	protected void onEvtReadyToAct() {
 		onEvtThink();
 	}
 
+	/**
+	 * This method is called when the target has arrived at its destination.
+	 * It calls the {@link #onEvtThink()} method.
+	 */
 	@Override
-	protected void onEvtArrivedTarget()
-	{
+	protected void onEvtArrivedTarget() {
 		onEvtThink();
 	}
 
+	/**
+	 * This method is called when the NPC arrives at its destination. It invokes the onEvtThink() method.
+	 */
 	@Override
-	protected void onEvtArrived()
-	{
+	protected void onEvtArrived() {
 		onEvtThink();
 	}
 
-	protected boolean tryMoveToTarget(Creature target)
-	{
+	/**
+	 * Tries to move the creature towards the given target.
+	 *
+	 * @param target The target creature to move towards.
+	 * @return True if the creature was able to move towards the target, false otherwise.
+	 */
+	protected boolean tryMoveToTarget(Creature target) {
 		return tryMoveToTarget(target, 0);
 	}
 
-	protected boolean tryMoveToTarget(Creature target, int range)
-	{
+	/**
+	 * Tries to move the actor to the target within the specified range.
+	 * If the actor fails to follow the target, the pathfind fails counter is incremented.
+	 * If the pathfind fails counter exceeds the maximum allowed, and the attack timeout
+	 * has passed, and the actor is within the maximum pursue range of the target,
+	 * the actor will return home if the target is playable and has low aggro.
+	 * Otherwise, the actor will try to move towards the target using pathfinding.
+	 * If pathfinding fails, the actor will teleport to the target's location if allowed.
+	 *
+	 * @param target the target to move towards
+	 * @param range the maximum range to move towards the target
+	 * @return true if the actor successfully moved towards the target, false otherwise
+	 */
+	protected boolean tryMoveToTarget(Creature target, int range) {
 		NpcInstance actor = getActor();
 
-		if (!actor.followToCharacter(target, actor.getPhysicalAttackRange(), true))
-		{
+		if (!actor.followToCharacter(target, actor.getPhysicalAttackRange(), true)) {
 			_pathfindFails++;
 		}
 
-		if ((_pathfindFails >= getMaxPathfindFails()) && (System.currentTimeMillis() > ((getAttackTimeout() - getMaxAttackTimeout()) + getTeleportTimeout())) && actor.isInRange(target, MAX_PURSUE_RANGE))
-		{
+		if (_pathfindFails >= getMaxPathfindFails() && System.currentTimeMillis() > (getAttackTimeout() - getMaxAttackTimeout() + getTeleportTimeout()) && actor.isInRange(target, MAX_PURSUE_RANGE)) {
 			_pathfindFails = 0;
 
-			if (target.isPlayable())
-			{
+			if (target.isPlayable()) {
 				AggroInfo hate = actor.getAggroList().get(target);
-				if ((hate == null) || ((hate.damage < 100) && (hate.hate < 100)))
-				{
+				if (hate == null || (hate.damage < 100 && hate.hate < 100)) {
 					returnHome();
 					return false;
 				}
 			}
 			Location loc = GeoEngine.moveCheckForAI(target.getLoc(), actor.getLoc(), actor.getGeoIndex());
-			if (!GeoEngine.canMoveToCoord(actor.getX(), actor.getY(), actor.getZ(), loc.x, loc.y, loc.z, actor.getGeoIndex()))
-			{
+			if (!GeoEngine.canMoveToCoord(actor.getX(), actor.getY(), actor.getZ(), loc.x, loc.y, loc.z, actor.getGeoIndex())) {
 				loc = target.getLoc();
 			}
-			if (canTeleWhenCannotSeeTarget())
-			{
+			if (canTeleWhenCannotSeeTarget()) {
 				actor.teleToLocation(loc);
 			}
 		}
@@ -781,206 +911,231 @@ public class DefaultAI extends CharacterAI
 		return true;
 	}
 
-	protected boolean canTeleWhenCannotSeeTarget()
-	{
+	/**
+	 * Determines whether telecommunication is possible when the target is not visible.
+	 *
+	 * @return {@code true} if telecommunication is possible when the target is not visible, {@code false} otherwise.
+	 */
+	protected boolean canTeleWhenCannotSeeTarget() {
 		return true;
 	}
 
-	protected boolean maybeNextTask(Task currentTask)
-	{
-		// Следующее задание
+	/**
+	 * Executes a task for the NPC.
+	 *
+	 * @param currentTask the task to handle
+	 *
+	 * @return {@code true} if the task was executed successfully, {@code false} otherwise.
+	 */
+	protected boolean maybeNextTask(Task currentTask) {
+		// Próxima tarefa
 		_tasks.remove(currentTask);
-		// Если заданий больше нет - определить новое
-		if (_tasks.size() == 0)
-		{
-			return true;
-		}
-		return false;
-	}
+		// Se não houver mais tarefas - determine uma nova
+        return _tasks.isEmpty();
+    }
 
-	protected boolean doTask()
-	{
+	/**
+	 * Executes a task for the NPC.
+	 *
+	 * @return {@code true} if the task was executed successfully, {@code false} otherwise.
+	 */
+	protected boolean doTask() {
 		NpcInstance actor = getActor();
 
-		if (!_def_think)
-		{
+		if (!_def_think) {
 			return true;
 		}
 
 		Task currentTask = _tasks.pollFirst();
-		if (currentTask == null)
-		{
+		if (currentTask == null) {
 			clearTasks();
 			return true;
 		}
 
-		if (actor.isDead() || actor.isAttackingNow() || actor.isCastingNow())
-		{
+		if (actor.isDead() || actor.isAttackingNow() || actor.isCastingNow()) {
 			return false;
 		}
 
-		switch (currentTask.type)
-		{
-		// Задание "прибежать в заданные координаты"
-		case MOVE:
-		{
-			if (actor.isMovementDisabled() || !getIsMobile())
-			{
-				return true;
-			}
+        return switch (currentTask.type) {
+            case MOVE -> handleMoveTask(currentTask);
+            case ATTACK -> handleAttackTask(currentTask);
+            case CAST -> handleCastTask(currentTask);
+            case BUFF -> handleBuffTask(currentTask);
+            default -> false;
+        };
 
-			if (actor.isInRange(currentTask.loc, 100))
-			{
-				return maybeNextTask(currentTask);
-			}
+    }
 
-			if (actor.isMoving)
-			{
-				return false;
-			}
-
-			if (!actor.moveToLocation(currentTask.loc, 0, currentTask.pathfind))
-			{
-				clientStopMoving();
-				_pathfindFails = 0;
-				actor.teleToLocation(currentTask.loc);
-				return maybeNextTask(currentTask);
-			}
-		}
-			break;
-		// Задание "добежать - ударить"
-		case ATTACK:
-		{
-			Creature target = currentTask.target.get();
-
-			if (!checkTarget(target, MAX_PURSUE_RANGE))
-			{
-				return true;
-			}
-
-			setAttackTarget(target);
-
-			if (actor.isMoving)
-			{
-				return Rnd.chance(25);
-			}
-
-			if ((actor.getRealDistance3D(target) <= (actor.getPhysicalAttackRange() + 40)) && GeoEngine.canSeeTarget(actor, target, false))
-			{
-				clientStopMoving();
-				_pathfindFails = 0;
-				setAttackTimeout(getMaxAttackTimeout() + System.currentTimeMillis());
-				actor.doAttack(target);
-				return maybeNextTask(currentTask);
-			}
-
-			if (actor.isMovementDisabled() || !getIsMobile())
-			{
-				return true;
-			}
-
-			tryMoveToTarget(target);
-		}
-			break;
-		// Setting "to run - attack skill"
-		case CAST:
-		{
-			Creature target = currentTask.target.get();
-
-			if (actor.isMuted(currentTask.skill) || actor.isSkillDisabled(currentTask.skill) || actor.isUnActiveSkill(currentTask.skill.getId()))
-			{
-				return true;
-			}
-
-			boolean isAoE = currentTask.skill.getTargetType() == Skill.SkillTargetType.TARGET_AURA;
-			int castRange = currentTask.skill.getAOECastRange();
-
-			if (!checkTarget(target, MAX_PURSUE_RANGE + castRange))
-			{
-				return true;
-			}
-
-			setAttackTarget(target);
-
-			if ((actor.getRealDistance3D(target) <= (castRange + 60)) && GeoEngine.canSeeTarget(actor, target, false))
-			{
-				clientStopMoving();
-				_pathfindFails = 0;
-				setAttackTimeout(getMaxAttackTimeout() + System.currentTimeMillis());
-				actor.doCast(currentTask.skill, isAoE ? actor : target, !target.isPlayable());
-				return maybeNextTask(currentTask);
-			}
-
-			if (actor.isMoving)
-			{
-				return Rnd.chance(10);
-			}
-
-			if (actor.isMovementDisabled() || !getIsMobile())
-			{
-				return true;
-			}
-
-			tryMoveToTarget(target, castRange);
-		}
-			break;
-		// Task "to run - use skill"
-		case BUFF:
-		{
-			Creature target = currentTask.target.get();
-
-			if (actor.isMuted(currentTask.skill) || actor.isSkillDisabled(currentTask.skill) || actor.isUnActiveSkill(currentTask.skill.getId()))
-			{
-				return true;
-			}
-
-			if ((target == null) || target.isAlikeDead() || !actor.isInRange(target, 2000))
-			{
-				return true;
-			}
-
-			boolean isAoE = currentTask.skill.getTargetType() == Skill.SkillTargetType.TARGET_AURA;
-			int castRange = currentTask.skill.getAOECastRange();
-
-			if (actor.isMoving)
-			{
-				return Rnd.chance(10);
-			}
-
-			if ((actor.getRealDistance3D(target) <= (castRange + 60)) && GeoEngine.canSeeTarget(actor, target, false))
-			{
-				clientStopMoving();
-				_pathfindFails = 0;
-				actor.doCast(currentTask.skill, isAoE ? actor : target, !target.isPlayable());
-				return maybeNextTask(currentTask);
-			}
-
-			if (actor.isMovementDisabled() || !getIsMobile())
-			{
-				return true;
-			}
-
-			tryMoveToTarget(target);
-		}
-			break;
+	/**
+	 * Handles moving the actor to a given task location.
+	 *
+	 * @param currentTask the task to handle
+	 *
+	 * @return {@code true} if the actor successfully moves to the task location, {@code false} otherwise
+	 */
+	private boolean handleMoveTask(Task currentTask) {
+		NpcInstance actor = getActor();
+		if (actor.isMovementDisabled() || !getIsMobile()) {
+			return true;
 		}
 
+		if (actor.isInRange(currentTask.loc, 100)) {
+			return maybeNextTask(currentTask);
+		}
+
+		if (actor.isMoving) {
+			return false;
+		}
+
+		if (!actor.moveToLocation(currentTask.loc, 0, currentTask.pathfind)) {
+			clientStopMoving();
+			_pathfindFails = 0;
+			actor.teleToLocation(currentTask.loc);
+			return maybeNextTask(currentTask);
+		}
 		return false;
 	}
 
+	/**
+	 * Handles the attack task for the NPC.
+	 *
+	 * @param currentTask The current task of the NPC.
+	 * @return True if the attack task is complete, false otherwise.
+	 */
+	private boolean handleAttackTask(Task currentTask) {
+		NpcInstance actor = getActor();
+		Creature target = currentTask.target.get();
+
+		if (!checkTarget(target, MAX_PURSUE_RANGE)) {
+			return true;
+		}
+
+		setAttackTarget(target);
+
+		if (actor.isMoving) {
+			return Rnd.chance(25);
+		}
+
+		if (actor.getRealDistance3D(target) <= actor.getPhysicalAttackRange() + 40 && GeoEngine.canSeeTarget(actor, target, false)) {
+			clientStopMoving();
+			_pathfindFails = 0;
+			setAttackTimeout(getMaxAttackTimeout() + System.currentTimeMillis());
+			actor.doAttack(target);
+			return maybeNextTask(currentTask);
+		}
+
+		if (actor.isMovementDisabled() || !getIsMobile()) {
+			return true;
+		}
+
+		tryMoveToTarget(target);
+		return false;
+	}
+
+	/**
+	 * Handles casting a task for the NPC actor.
+	 *
+	 * @param currentTask The task to be cast.
+	 * @return True if the task was successfully handled, false otherwise.
+	 */
+	private boolean handleCastTask(Task currentTask) {
+		NpcInstance actor = getActor();
+		Creature target = currentTask.target.get();
+
+		if (actor.isMuted(currentTask.skill) || actor.isSkillDisabled(currentTask.skill) || actor.isUnActiveSkill(currentTask.skill.getId())) {
+			return true;
+		}
+
+		boolean isAoE = currentTask.skill.getTargetType() == Skill.SkillTargetType.TARGET_AURA;
+		int castRange = currentTask.skill.getAOECastRange();
+
+		if (!checkTarget(target, MAX_PURSUE_RANGE + castRange)) {
+			return true;
+		}
+
+		setAttackTarget(target);
+
+		if (actor.getRealDistance3D(target) <= castRange + 60 && GeoEngine.canSeeTarget(actor, target, false)) {
+			clientStopMoving();
+			_pathfindFails = 0;
+			setAttackTimeout(getMaxAttackTimeout() + System.currentTimeMillis());
+			actor.doCast(currentTask.skill, isAoE ? actor : target, !target.isPlayable());
+			return maybeNextTask(currentTask);
+		}
+
+		if (actor.isMoving) {
+			return Rnd.chance(10);
+		}
+
+		if (actor.isMovementDisabled() || !getIsMobile()) {
+			return true;
+		}
+
+		tryMoveToTarget(target, castRange);
+		return false;
+	}
+
+	/**
+	 * Handles a buff task for the actor.
+	 *
+	 * @param currentTask The current task to handle.
+	 * @return true if the task was handled successfully, false otherwise.
+	 */
+	private boolean handleBuffTask(Task currentTask) {
+		NpcInstance actor = getActor();
+		Creature target = currentTask.target.get();
+
+		if (actor.isMuted(currentTask.skill) || actor.isSkillDisabled(currentTask.skill) || actor.isUnActiveSkill(currentTask.skill.getId())) {
+			return true;
+		}
+
+		if (target == null || target.isAlikeDead() || !actor.isInRange(target, 2000)) {
+			return true;
+		}
+
+		boolean isAoE = currentTask.skill.getTargetType() == Skill.SkillTargetType.TARGET_AURA;
+		int castRange = currentTask.skill.getAOECastRange();
+
+		if (actor.isMoving) {
+			return Rnd.chance(10);
+		}
+
+		if (actor.getRealDistance3D(target) <= castRange + 60 && GeoEngine.canSeeTarget(actor, target, false)) {
+			clientStopMoving();
+			_pathfindFails = 0;
+			actor.doCast(currentTask.skill, isAoE ? actor : target, !target.isPlayable());
+			return maybeNextTask(currentTask);
+		}
+
+		if (actor.isMovementDisabled() || !getIsMobile()) {
+			return true;
+		}
+
+		tryMoveToTarget(target);
+		return false;
+	}
+
+	/**
+	 * Creates a new task.
+	 *
+	 * @return {@code true} if the task is successfully created, {@code false} otherwise.
+	 */
 	protected boolean createNewTask()
 	{
 		return false;
 	}
 
-	protected boolean defaultNewTask()
-	{
+	/**
+	 * Clears all the tasks of the actor and prepares a new task for it.
+	 *
+	 * @return true if a new task is successfully prepared, false otherwise.
+	 */
+	protected boolean defaultNewTask() {
 		clearTasks();
 
 		NpcInstance actor = getActor();
 		Creature target;
-		if ((actor == null) || ((target = prepareTarget()) == null))
-		{
+		if ((actor == null) || ((target = prepareTarget()) == null)) {
 			return false;
 		}
 
@@ -988,53 +1143,56 @@ public class DefaultAI extends CharacterAI
 		return chooseTaskAndTargets(null, target, distance);
 	}
 
+	/**
+	 * Executes the think logic for the AI. This method is called by the AI framework
+	 * to determine the next action of the NPC.
+	 */
 	@Override
-	protected void onEvtThink()
-	{
+	protected void onEvtThink() {
 		NpcInstance actor = getActor();
-		if (_thinking || (actor == null) || actor.isActionsDisabled() || actor.isAfraid())
-		{
+		if (_thinking || actor == null || actor.isActionsDisabled() || actor.isAfraid()) {
 			return;
 		}
 
-		if (_randomAnimationEnd > System.currentTimeMillis())
-		{
+		if (_randomAnimationEnd > System.currentTimeMillis()) {
 			return;
 		}
 
 		_thinking = true;
-		try
-		{
-			switch (getIntention())
-			{
-			case AI_INTENTION_ACTIVE:
-				if (!Config.BLOCK_ACTIVE_TASKS)
-				{
-					thinkActive();
-				}
-				break;
-			case AI_INTENTION_ATTACK:
-				thinkAttack();
-				break;
+		try {
+			switch (getIntention()) {
+				case AI_INTENTION_ACTIVE:
+					if (!Config.BLOCK_ACTIVE_TASKS) {
+						thinkActive();
+					}
+					break;
+				case AI_INTENTION_ATTACK:
+					thinkAttack();
+					break;
+				default:
+					break;
 			}
-		}
-		finally
-		{
+		} finally {
 			_thinking = false;
 		}
 	}
 
+
+	/**
+	 * This method is called when the Creature associated with this AI instance dies.
+	 * It is responsible for handling the logic related to transforming the dead NPC into another NPC, based on certain parameters.
+	 *
+	 * @param killer the Creature that killed the NPC
+	 */
 	@Override
-	protected void onEvtDead(Creature killer)
-	{
+	protected void onEvtDead(Creature killer) {
 		final NpcInstance actor = getActor();
 		final int transformer = actor.getParameter("transformOnDead", 0);
 		final int chance = actor.getParameter("transformChance", 100);
-		if (transformer > 0 && Rnd.chance(chance))
-		{
+
+		if (transformer > 0 && Rnd.chance(chance)) {
 			final NpcInstance npc = NpcUtils.spawnSingle(transformer, actor.getLoc(), actor.getReflection());
-			if (killer != null && killer.isPlayable())
-			{
+			if (killer != null && killer.isPlayable()) {
 				npc.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, killer, 100);
 				killer.setTarget(npc);
 				killer.sendPacket(npc.makeStatusUpdate(StatusUpdate.CUR_HP, StatusUpdate.MAX_HP));
@@ -1044,102 +1202,62 @@ public class DefaultAI extends CharacterAI
 		super.onEvtDead(killer);
 	}
 
+
+	/**
+	 * This method is called when a clan is attacked.
+	 *
+	 * @param attacked The creature that is being attacked.
+	 * @param attacker The creature that initiated the attack.
+	 * @param damage   The amount of damage inflicted.
+	 */
 	@Override
-	protected void onEvtClanAttacked(Creature attacked, Creature attacker, int damage)
-	{
-		if ((getIntention() != CtrlIntention.AI_INTENTION_ACTIVE) || !isGlobalAggro())
-		{
+	protected void onEvtClanAttacked(Creature attacked, Creature attacker, int damage) {
+		if ((getIntention() != CtrlIntention.AI_INTENTION_ACTIVE) || !isGlobalAggro()) {
 			return;
 		}
 
 		NpcInstance actor = getActor();
-		if ((actor == null) || !actor.isInRange(attacked, actor.getFaction().getRange()) || (Math.abs(attacker.getZ() - actor.getZ()) > MAX_Z_AGGRO_RANGE))
-		{
+		if (actor == null || !actor.isInRange(attacked, actor.getFaction().getRange()) || Math.abs(attacker.getZ() - actor.getZ()) > MAX_Z_AGGRO_RANGE) {
 			return;
 		}
 
-		if (GeoEngine.canSeeTarget(actor, attacked, false))
-		{
-			notifyEvent(CtrlEvent.EVT_AGGRESSION, new Object[]
-			{
-				attacker,
-				attacker.isSummon() ? damage : 2
-			});
+		if (GeoEngine.canSeeTarget(actor, attacked, false)) {
+			notifyEvent(CtrlEvent.EVT_AGGRESSION, new Object[]{attacker, attacker.isSummon() ? damage : 2});
 		}
 	}
 
+
+	/**
+	 * Handles the event when the actor is attacked by a creature.
+	 *
+	 * @param attacker the creature that is attacking the actor
+	 * @param damage the amount of damage inflicted by the attacker
+	 */
 	@Override
-	protected void onEvtAttacked(Creature attacker, int damage)
-	{
+	protected void onEvtAttacked(Creature attacker, int damage) {
 		NpcInstance actor = getActor();
-		if ((attacker == null) || actor.isDead())
-		{
-			if (actor.isDead())
-			{
+		if (attacker == null || actor.isDead()) {
+			if (actor.isDead()) {
 				notifyFriends(attacker, damage);
 			}
 			return;
 		}
 
-		int transformer = actor.getParameter("transformOnUnderAttack", 0);
-		if (transformer > 0)
-		{
-			int chance = actor.getParameter("transformChance", 5);
-			if ((chance == 100) || ((((MonsterInstance) actor).getChampion() == 0) && (actor.getCurrentHpPercents() > 50) && Rnd.chance(chance)))
-			{
-				MonsterInstance npc = (MonsterInstance) NpcHolder.getInstance().getTemplate(transformer).getNewInstance();
-				npc.setSpawnedLoc(actor.getLoc());
-				npc.setReflection(actor.getReflection());
-				npc.setChampion(((MonsterInstance) actor).getChampion());
-				npc.setCurrentHpMp(npc.getMaxHp(), npc.getMaxMp(), true);
-				npc.spawnMe(npc.getSpawnedLoc());
-				npc.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, 100);
-				actor.doDie(actor);
-				actor.decayMe();
-				attacker.setTarget(npc);
-				attacker.sendPacket(npc.makeStatusUpdate(StatusUpdate.CUR_HP, StatusUpdate.MAX_HP));
-				return;
-			}
-		}
+		handleTransformationOnAttack(attacker);
 
 		Player player = attacker.getPlayer();
-
-		if (player != null)
-		{ // FIXME Plugs 7 seals, the 7 seals attacking monster teleports the character to the nearest town
-			if (((SevenSigns.getInstance().isSealValidationPeriod()) || (SevenSigns.getInstance().isCompResultsPeriod())) && (actor.isSevenSignsMonster()) && (Config.RETAIL_SS))
-			{
-				int pcabal = SevenSigns.getInstance().getPlayerCabal(player);
-				int wcabal = SevenSigns.getInstance().getCabalHighestScore();
-				if ((pcabal != wcabal) && (wcabal != SevenSigns.CABAL_NULL))
-				{
-					player.sendMessage("You have been teleported to the nearest town because you not signed for winning cabal.");
-					player.teleToClosestTown();
-					return;
-				}
-			}
-			List<QuestState> quests = player.getQuestsForEvent(actor, QuestEventType.ATTACKED_WITH_QUEST);
-			if (quests != null)
-			{
-				for (QuestState qs : quests)
-				{
-					qs.getQuest().notifyAttack(actor, qs);
-				}
-			}
+		if (player != null) {
+			handlePlayerAttack(actor, player);
 		}
 
-		// Добавляем только хейт, урон, если атакующий - игровой персонаж, будет добавлен в L2NpcInstance.onReduceCurrentHp
 		actor.getAggroList().addDamageHate(attacker, 0, damage);
 
-		// Обычно 1 хейт добавляется хозяину суммона, чтобы после смерти суммона моб накинулся на хозяина.
-		if ((damage > 0) && (attacker.isSummon() || attacker.isPet()))
-		{
+		if (damage > 0 && (attacker.isSummon() || attacker.isPet())) {
 			actor.getAggroList().addDamageHate(attacker.getPlayer(), 0, actor.getParameter("searchingMaster", false) ? damage : 1);
 		}
 
-		if (getIntention() != CtrlIntention.AI_INTENTION_ATTACK)
-		{
-			if (!actor.isRunning())
-			{
+		if (getIntention() != CtrlIntention.AI_INTENTION_ATTACK) {
+			if (!actor.isRunning()) {
 				startRunningTask(AI_TASK_ATTACK_DELAY);
 			}
 			setIntention(CtrlIntention.AI_INTENTION_ATTACK, attacker);
@@ -1148,54 +1266,132 @@ public class DefaultAI extends CharacterAI
 		notifyFriends(attacker, damage);
 	}
 
-	@Override
-	protected void onEvtAggression(Creature attacker, int aggro)
-	{
+	/**
+	 * Handles the transformation on attack by the attacker.
+	 *
+	 * @param attacker the attacker Creature object
+	 */
+	private void handleTransformationOnAttack(Creature attacker) {
 		NpcInstance actor = getActor();
-		if ((attacker == null) || actor.isDead())
-		{
+		int transformer = actor.getParameter("transformOnUnderAttack", 0);
+		if (transformer > 0) {
+			int chance = actor.getParameter("transformChance", 5);
+			if ((chance == 100) || ((((MonsterInstance) actor).getChampion() == 0) && (actor.getCurrentHpPercents() > 50) && Rnd.chance(chance))) {
+				transformAndAttack(attacker, transformer);
+			}
+		}
+	}
+
+	/**
+	 * Transforms the attacker into a monster and initiates an attack on a creature.
+	 *
+	 * @param attacker   the creature initiating the attack
+	 * @param transformer the id of the monster to transform the attacker into
+	 */
+	private void transformAndAttack(Creature attacker, int transformer) {
+		NpcInstance actor = getActor();
+		MonsterInstance npc = (MonsterInstance) NpcHolder.getInstance().getTemplate(transformer).getNewInstance();
+		npc.setSpawnedLoc(actor.getLoc());
+		npc.setReflection(actor.getReflection());
+		npc.setChampion(((MonsterInstance) actor).getChampion());
+		npc.setCurrentHpMp(npc.getMaxHp(), npc.getMaxMp(), true);
+		npc.spawnMe(npc.getSpawnedLoc());
+		npc.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, 100);
+		actor.doDie(actor);
+		actor.decayMe();
+		attacker.setTarget(npc);
+		attacker.sendPacket(npc.makeStatusUpdate(StatusUpdate.CUR_HP, StatusUpdate.MAX_HP));
+	}
+
+	/**
+	 * Handles player attacks on an NPC actor.
+	 *
+	 * If the player is not signed for winning cabal, the player
+	 * will be teleported to the nearest town. Otherwise, this method
+	 * notifies all quests associated with the player's attack on the
+	 * NPC actor.
+	 *
+	 * @param actor the NPC being attacked
+	 * @param player the player performing the attack
+	 */
+	private void handlePlayerAttack(NpcInstance actor, Player player) {
+		if (shouldTeleportPlayer(player, actor)) {
+			player.sendMessage("You have been teleported to the nearest town because you not signed for winning cabal.");
+			player.teleToClosestTown();
+			return;
+		}
+
+		List<QuestState> quests = player.getQuestsForEvent(actor, QuestEventType.ATTACKED_WITH_QUEST);
+        for (QuestState qs : quests) {
+            qs.getQuest().notifyAttack(actor, qs);
+        }
+    }
+
+	/**
+	 * Determines whether the player should be teleported based on certain conditions.
+	 *
+	 * @param player the player to be teleported
+	 * @param actor the NPC instance
+	 * @return true if the player should be teleported, false otherwise
+	 */
+	private boolean shouldTeleportPlayer(Player player, NpcInstance actor) {
+		if ((SevenSigns.getInstance().isSealValidationPeriod() || SevenSigns.getInstance().isCompResultsPeriod()) && actor.isSevenSignsMonster() && Config.RETAIL_SS) {
+			int pcabal = SevenSigns.getInstance().getPlayerCabal(player);
+			int wcabal = SevenSigns.getInstance().getCabalHighestScore();
+			return pcabal != wcabal && wcabal != SevenSigns.CABAL_NULL;
+		}
+		return false;
+	}
+
+	/**
+	 * This method handles the event when the actor becomes aggressive towards a creature.
+	 *
+	 * @param attacker the creature initiating the aggression
+	 * @param aggro the aggression level
+	 */
+	@Override
+	protected void onEvtAggression(Creature attacker, int aggro) {
+		NpcInstance actor = getActor();
+		if (attacker == null || actor.isDead()) {
 			return;
 		}
 
 		actor.getAggroList().addDamageHate(attacker, 0, aggro);
 
-		// Обычно 1 хейт добавляется хозяину суммона, чтобы после смерти суммона моб накинулся на хозяина.
-		if ((aggro > 0) && (attacker.isSummon() || attacker.isPet()))
-		{
+		if (aggro > 0 && (attacker.isSummon() || attacker.isPet())) {
 			actor.getAggroList().addDamageHate(attacker.getPlayer(), 0, actor.getParameter("searchingMaster", false) ? aggro : 1);
 		}
 
-		if (getIntention() != CtrlIntention.AI_INTENTION_ATTACK)
-		{
-			if (!actor.isRunning())
-			{
+		if (getIntention() != CtrlIntention.AI_INTENTION_ATTACK) {
+			if (!actor.isRunning()) {
 				startRunningTask(AI_TASK_ATTACK_DELAY);
 			}
 			setIntention(CtrlIntention.AI_INTENTION_ATTACK, attacker);
 		}
 	}
 
-	protected boolean maybeMoveToHome()
-	{
+
+	/**
+	 * Checks if the actor should potentially move to its home location.
+	 *
+	 * @return true if the actor successfully moved or teleported to its home location, false otherwise
+	 */
+	protected boolean maybeMoveToHome() {
 		NpcInstance actor = getActor();
-		if (actor.isDead())
-		{
+		if (actor.isDead()) {
 			return false;
 		}
 
 		boolean randomWalk = actor.hasRandomWalk();
 		Location sloc = actor.getSpawnedLoc();
 
-		// Random walk or not?
-		if (randomWalk && (!Config.RND_WALK || !Rnd.chance(Config.RND_WALK_RATE)))
-		{
+		if (randomWalk && (!Config.RND_WALK || !Rnd.chance(Config.RND_WALK_RATE))) {
 			return false;
 		}
 
 		boolean isInRange = actor.isInRangeZ(sloc, Config.MAX_DRIFT_RANGE);
 
-		if (!randomWalk && isInRange)
-		{
+		if (!randomWalk && isInRange) {
 			return false;
 		}
 
@@ -1203,36 +1399,46 @@ public class DefaultAI extends CharacterAI
 
 		actor.setWalking();
 
-		// Телепортируемся домой, только если далеко от дома
-		if (!actor.moveToLocation(pos.x, pos.y, pos.z, 0, true) && !isInRange)
-		{
+		if (!actor.moveToLocation(pos.x, pos.y, pos.z, 0, true) && !isInRange) {
 			teleportHome();
 		}
 
 		return true;
 	}
 
+
+	/**
+	 * Returns the player home. This method is protected and does not return any value.
+	 * It internally calls the returnHome method with the default teleportation settings.
+	 */
 	protected void returnHome()
 	{
 		returnHome(true, Config.ALWAYS_TELEPORT_HOME);
 	}
 
+	/**
+	 * Teleports the user to their home location.
+	 * This method calls the returnHome method with the options to refresh the home location and activate teleportation animation.
+	 */
 	protected void teleportHome()
 	{
 		returnHome(true, true);
 	}
 
-	protected void returnHome(boolean clearAggro, boolean teleport)
-	{
+	/**
+	 * Returns the NPC to its home location.
+	 *
+	 * @param clearAggro whether to clear the NPC's aggression list
+	 * @param teleport   whether to teleport the NPC back home or just move it
+	 */
+	protected void returnHome(boolean clearAggro, boolean teleport) {
 		NpcInstance actor = getActor();
 		Location sloc = actor.getSpawnedLoc();
 
-		// Removes all jobs
 		clearTasks();
 		actor.stopMove();
 
-		if (clearAggro)
-		{
+		if (clearAggro) {
 			actor.getAggroList().clear(true);
 		}
 
@@ -1241,19 +1447,13 @@ public class DefaultAI extends CharacterAI
 
 		changeIntention(CtrlIntention.AI_INTENTION_ACTIVE, null, null);
 
-		if (teleport)
-		{
+		if (teleport) {
 			actor.broadcastPacketToOthers(new MagicSkillUse(actor, actor, 2036, 1, 500, 0));
 			actor.teleToLocation(sloc.x, sloc.y, GeoEngine.getHeight(sloc, actor.getGeoIndex()));
-		}
-		else
-		{
-			if (!clearAggro)
-			{
+		} else {
+			if (!clearAggro) {
 				actor.setRunning();
-			}
-			else
-			{
+			} else {
 				actor.setWalking();
 			}
 
@@ -1261,24 +1461,27 @@ public class DefaultAI extends CharacterAI
 		}
 	}
 
-	protected Creature prepareTarget()
-	{
+	/**
+	 * Prepares the target for the actor by selecting the most appropriate target based on certain conditions.
+	 * If the actor is confused, it returns the attack target.
+	 * If the actor is under the effect of madness, it selects a random hated creature from the aggro list as the attack target.
+	 * If there are no valid targets in the aggro list within the maximum pursue range, it removes them from the aggro list.
+	 * Otherwise, it selects the first valid target from the aggro list as the attack target.
+	 *
+	 * @return The prepared target for the actor, or null if no suitable target found.
+	 */
+	protected Creature prepareTarget() {
 		NpcInstance actor = getActor();
 
-		if (actor.isConfused())
-		{
+		if (actor.isConfused()) {
 			return getAttackTarget();
 		}
 
-		// Для "двинутых" боссов, иногда, выбираем случайную цель
-		if (Rnd.chance(actor.getParameter("isMadness", 0)))
-		{
+		if (Rnd.chance(actor.getParameter("isMadness", 0))) {
 			Creature randomHated = actor.getAggroList().getRandomHated();
-			if (randomHated != null)
-			{
+			if (randomHated != null) {
 				setAttackTarget(randomHated);
-				if ((_madnessTask == null) && !actor.isConfused())
-				{
+				if (_madnessTask == null && !actor.isConfused()) {
 					actor.startConfused();
 					_madnessTask = ThreadPoolManager.getInstance().schedule(new MadnessTask(), 10000);
 				}
@@ -1286,273 +1489,251 @@ public class DefaultAI extends CharacterAI
 			}
 		}
 
-		// Новая цель исходя из агрессивности
 		List<Creature> hateList = actor.getAggroList().getHateList();
-		Creature hated = null;
-		for (Creature cha : hateList)
-		{
-			// Не подходит, очищаем хейт
-			if (!checkTarget(cha, MAX_PURSUE_RANGE))
-			{
+		for (Creature cha : hateList) {
+			if (!checkTarget(cha, MAX_PURSUE_RANGE)) {
 				actor.getAggroList().remove(cha, true);
 				continue;
 			}
-			hated = cha;
-			break;
-		}
-
-		if (hated != null)
-		{
-			setAttackTarget(hated);
-			return hated;
+			setAttackTarget(cha);
+			return cha;
 		}
 
 		return null;
 	}
 
-	protected boolean canUseSkill(Skill skill, Creature target, double distance)
-	{
+	/**
+	 * Determines whether the given skill can be used on the target by the actor, based on various conditions.
+	 *
+	 * @param skill    the skill to be used
+	 * @param target   the target creature on which the skill will be used
+	 * @param distance the distance between the actor and the target
+	 * @return true if the skill can be used, false otherwise
+	 */
+	protected boolean canUseSkill(Skill skill, Creature target, double distance) {
 		NpcInstance actor = getActor();
-		if ((skill == null) || skill.isNotUsedByAI() || ((skill.getTargetType() == Skill.SkillTargetType.TARGET_SELF) && (target != actor)))
-		{
+		if (skill == null || skill.isNotUsedByAI() || (skill.getTargetType() == Skill.SkillTargetType.TARGET_SELF && target != actor)) {
 			return false;
 		}
 
 		int castRange = skill.getAOECastRange();
-		if ((castRange <= 200) && (distance > 200))
-		{
+		if (castRange <= 200 && distance > 200) {
 			return false;
 		}
 
-		if (actor.isSkillDisabled(skill) || actor.isMuted(skill) || actor.isUnActiveSkill(skill.getId()))
-		{
+		if (actor.isSkillDisabled(skill) || actor.isMuted(skill) || actor.isUnActiveSkill(skill.getId())) {
 			return false;
 		}
 
 		double mpConsume2 = skill.getMpConsume2();
-		if (skill.isMagic())
-		{
-			mpConsume2 = actor.calcStat(Stats.MP_MAGIC_SKILL_CONSUME, mpConsume2, target, skill);
-		}
-		else
-		{
-			mpConsume2 = actor.calcStat(Stats.MP_PHYSICAL_SKILL_CONSUME, mpConsume2, target, skill);
-		}
-		if ((actor.getCurrentMp() < mpConsume2) || (target.getEffectList().getEffectsCountForSkill(skill.getId()) != 0))
-		{
-			return false;
-		}
+		mpConsume2 = skill.isMagic() ? actor.calcStat(Stats.MP_MAGIC_SKILL_CONSUME, mpConsume2, target, skill) : actor.calcStat(Stats.MP_PHYSICAL_SKILL_CONSUME, mpConsume2, target, skill);
 
-		return true;
-	}
+        return !(actor.getCurrentMp() < mpConsume2) && target.getEffectList().getEffectsCountForSkill(skill.getId()) == 0;
+    }
 
-	protected boolean canUseSkill(Skill sk, Creature target)
-	{
+	/**
+	 * Checks if the given skill can be used on the specified target.
+	 *
+	 * @param sk     the skill to check if it can be used
+	 * @param target the target on which the skill will be used
+	 * @return true if the skill can be used on the target, false otherwise
+	 */
+	protected boolean canUseSkill(Skill sk, Creature target) {
 		return canUseSkill(sk, target, 0);
 	}
 
-	protected Skill[] selectUsableSkills(Creature target, double distance, Skill[] skills)
-	{
-		if ((skills == null) || (skills.length == 0) || (target == null))
-		{
+	/**
+	 * Selects the usable skills based on the target, distance, and array of skills.
+	 *
+	 * @param target   the target creature
+	 * @param distance the distance to the target
+	 * @param skills   the array of skills to be evaluated
+	 * @return an array of usable skills, or null if there are no usable skills
+	 */
+	protected Skill[] selectUsableSkills(Creature target, double distance, Skill[] skills) {
+		if (skills == null || skills.length == 0 || target == null) {
 			return null;
 		}
 
-		Skill[] ret = null;
+		Skill[] ret = new Skill[skills.length];
 		int usable = 0;
 
-		for (Skill skill : skills)
-		{
-			if (canUseSkill(skill, target, distance))
-			{
-				if (ret == null)
-				{
-					ret = new Skill[skills.length];
-				}
+		for (Skill skill : skills) {
+			if (canUseSkill(skill, target, distance)) {
 				ret[usable++] = skill;
 			}
 		}
 
-		if ((ret == null) || (usable == skills.length))
-		{
-			return ret;
-		}
-
-		if (usable == 0)
-		{
-			return null;
-		}
-
-		ret = Arrays.copyOf(ret, usable);
-		return ret;
+		return usable == 0 ? null : Arrays.copyOf(ret, usable);
 	}
 
-	protected static Skill selectTopSkillByDamage(Creature actor, Creature target, double distance, Skill[] skills)
-	{
-		if ((skills == null) || (skills.length == 0))
-		{
+
+	/**
+	 * Selects the top skill based on damage for an actor targeting a specific creature.
+	 *
+	 * @param actor the creature performing the skill
+	 * @param target the creature being targeted
+	 * @param distance the distance between the actor and the target
+	 * @param skills an array of skills to choose from
+	 * @return the skill with the highest damage relative to the distance
+	 */
+	protected static Skill selectTopSkillByDamage(Creature actor, Creature target, double distance, Skill[] skills) {
+		if (skills == null || skills.length == 0) {
 			return null;
 		}
 
-		if (skills.length == 1)
-		{
+		if (skills.length == 1) {
 			return skills[0];
 		}
 
 		RndSelector<Skill> rnd = new RndSelector<>(skills.length);
-		double weight;
-		for (Skill skill : skills)
-		{
-			weight = (skill.getSimpleDamage(actor, target) * skill.getAOECastRange()) / distance;
-			if (weight < 1.)
-			{
-				weight = 1.;
-			}
-			rnd.add(skill, (int) weight);
+		for (Skill skill : skills) {
+			double weight = (skill.getSimpleDamage(actor, target) * skill.getAOECastRange()) / distance;
+			rnd.add(skill, (int) Math.max(weight, 1.0));
 		}
 		return rnd.select();
 	}
 
-	protected static Skill selectTopSkillByDebuff(Creature actor, Creature target, double distance, Skill[] skills) // FIXME
-	{
-		if ((skills == null) || (skills.length == 0))
-		{
+	/**
+	 * Selects the top skill to use based on debuffs.
+	 *
+	 * @param actor   The creature performing the skill.
+	 * @param target  The target creature.
+	 * @param distance The distance between the actor and the target.
+	 * @param skills  The array of skills to choose from.
+	 * @return The selected skill, or null if no suitable skill is found.
+	 */
+	protected static Skill selectTopSkillByDebuff(Creature actor, Creature target, double distance, Skill[] skills) {
+		if (skills == null || skills.length == 0) {
 			return null;
 		}
 
-		if (skills.length == 1)
-		{
+		if (skills.length == 1) {
 			return skills[0];
 		}
 
 		RndSelector<Skill> rnd = new RndSelector<>(skills.length);
-		double weight;
-		for (Skill skill : skills)
-		{
-			if (skill.getSameByStackType(target) != null)
-			{
+		for (Skill skill : skills) {
+			if (skill.getSameByStackType(target) != null) {
 				continue;
 			}
-			if ((weight = (100. * skill.getAOECastRange()) / distance) <= 0)
-			{
-				weight = 1;
-			}
-			rnd.add(skill, (int) weight);
+			double weight = (100.0 * skill.getAOECastRange()) / distance;
+			rnd.add(skill, (int) Math.max(weight, 1.0));
 		}
 		return rnd.select();
 	}
 
-	protected static Skill selectTopSkillByBuff(Creature target, Skill[] skills)
-	{
-		if ((skills == null) || (skills.length == 0))
-		{
+	/**
+	 * Selects the top skill by buff from the given array of skills.
+	 *
+	 * @param target  the target creature
+	 * @param skills  the array of skills to select from
+	 * @return the top skill with the highest buff power, or null if no skills are provided
+	 */
+	protected static Skill selectTopSkillByBuff(Creature target, Skill[] skills) {
+		if (skills == null || skills.length == 0) {
 			return null;
 		}
 
-		if (skills.length == 1)
-		{
+		if (skills.length == 1) {
 			return skills[0];
 		}
 
 		RndSelector<Skill> rnd = new RndSelector<>(skills.length);
-		double weight;
-		for (Skill skill : skills)
-		{
-			if (skill.getSameByStackType(target) != null)
-			{
+		for (Skill skill : skills) {
+			if (skill.getSameByStackType(target) != null) {
 				continue;
 			}
-			if ((weight = skill.getPower()) <= 0)
-			{
-				weight = 1;
-			}
-			rnd.add(skill, (int) weight);
+			double weight = skill.getPower();
+			rnd.add(skill, (int) Math.max(weight, 1.0));
 		}
 		return rnd.select();
 	}
 
-	protected static Skill selectTopSkillByHeal(Creature target, Skill[] skills)
-	{
-		if ((skills == null) || (skills.length == 0))
-		{
+	/**
+	 * Selects the skill that has the highest healing power based on the difference between the target's maximum HP and its current HP.
+	 *
+	 * @param target the creature to heal
+	 * @param skills the array of skills to choose from
+	 * @return the skill with the highest healing power, or null if the skills array is empty, null, or the difference between the target's maximum HP and its current HP is less than
+	 *  1.
+	 */
+	protected static Skill selectTopSkillByHeal(Creature target, Skill[] skills) {
+		if (skills == null || skills.length == 0 || target.getMaxHp() - target.getCurrentHp() < 1) {
 			return null;
 		}
 
-		double hpReduced = target.getMaxHp() - target.getCurrentHp();
-		if (hpReduced < 1)
-		{
-			return null;
-		}
-
-		if (skills.length == 1)
-		{
+		if (skills.length == 1) {
 			return skills[0];
 		}
 
 		RndSelector<Skill> rnd = new RndSelector<>(skills.length);
-		double weight;
-		for (Skill skill : skills)
-		{
-			if ((weight = Math.abs(skill.getPower() - hpReduced)) <= 0)
-			{
-				weight = 1;
-			}
-			rnd.add(skill, (int) weight);
+		for (Skill skill : skills) {
+			double weight = Math.abs(skill.getPower() - (target.getMaxHp() - target.getCurrentHp()));
+			rnd.add(skill, (int) Math.max(weight, 1.0));
 		}
 		return rnd.select();
 	}
 
-	protected void addDesiredSkill(Map<Skill, Integer> skillMap, Creature target, double distance, Skill[] skills)
-	{
-		if ((skills == null) || (skills.length == 0) || (target == null))
-		{
+
+	/**
+	 * Adds desired skills to the skill map based on the target, distance, and array of skills.
+	 *
+	 * @param skillMap  the map of skills and their corresponding weights
+	 * @param target    the target creature
+	 * @param distance  the distance from the target
+	 * @param skills    the array of skills to be added
+	 */
+	protected void addDesiredSkill(Map<Skill, Integer> skillMap, Creature target, double distance, Skill[] skills) {
+		if (skills == null || skills.length == 0 || target == null) {
 			return;
 		}
-		for (Skill sk : skills)
-		{
+		for (Skill sk : skills) {
 			addDesiredSkill(skillMap, target, distance, sk);
 		}
 	}
 
-	protected void addDesiredSkill(Map<Skill, Integer> skillMap, Creature target, double distance, Skill skill)
-	{
-		if ((skill == null) || (target == null) || !canUseSkill(skill, target))
-		{
+	/**
+	 * Adds a desired skill to the skill map based on various conditions.
+	 *
+	 * @param skillMap the map of skills and their corresponding weights
+	 * @param target   the target creature to use the skill on
+	 * @param distance the distance between the actor and the target creature
+	 * @param skill    the skill to add to the skill map
+	 */
+	protected void addDesiredSkill(Map<Skill, Integer> skillMap, Creature target, double distance, Skill skill) {
+		if (skill == null || target == null || !canUseSkill(skill, target)) {
 			return;
 		}
 		int weight = (int) -Math.abs(skill.getAOECastRange() - distance);
-		if (skill.getAOECastRange() >= distance)
-		{
+		if (skill.getAOECastRange() >= distance) {
 			weight += 1000000;
-		}
-		else if (skill.isNotTargetAoE() && (skill.getTargets(getActor(), target, false).size() == 0))
-		{
+		} else if (skill.isNotTargetAoE() && skill.getTargets(getActor(), target, false).isEmpty()) {
 			return;
 		}
 		skillMap.put(skill, weight);
 	}
 
-	protected void addDesiredHeal(Map<Skill, Integer> skillMap, Skill[] skills)
-	{
-		if ((skills == null) || (skills.length == 0))
-		{
+	/**
+	 * Adds desired skills for healing to the skill map.
+	 *
+	 * @param skillMap the map that stores the desired skills for healing, where the key is the skill and the value is the weight
+	 * @param skills the array of skills to consider for healing
+	 */
+	protected void addDesiredHeal(Map<Skill, Integer> skillMap, Skill[] skills) {
+		if (skills == null || skills.length == 0) {
 			return;
 		}
 		NpcInstance actor = getActor();
 		double hpReduced = actor.getMaxHp() - actor.getCurrentHp();
 		double hpPercent = actor.getCurrentHpPercents();
-		if (hpReduced < 1)
-		{
+		if (hpReduced < 1) {
 			return;
 		}
-		int weight;
-		for (Skill sk : skills)
-		{
-			if (canUseSkill(sk, actor) && (sk.getPower() <= hpReduced))
-			{
-				weight = (int) sk.getPower();
-				if (hpPercent < 50)
-				{
+		for (Skill sk : skills) {
+			if (canUseSkill(sk, actor) && sk.getPower() <= hpReduced) {
+				int weight = (int) sk.getPower();
+				if (hpPercent < 50) {
 					weight += 1000000;
 				}
 				skillMap.put(sk, weight);
@@ -1560,127 +1741,158 @@ public class DefaultAI extends CharacterAI
 		}
 	}
 
-	protected void addDesiredBuff(Map<Skill, Integer> skillMap, Skill[] skills)
-	{
-		if ((skills == null) || (skills.length == 0))
-		{
+	/**
+	 * Adds desired buffs to the given skill map.
+	 *
+	 * @param skillMap the map containing skills and their respective durations
+	 * @param skills the array of skills to be added as desired buffs
+	 */
+	protected void addDesiredBuff(Map<Skill, Integer> skillMap, Skill[] skills) {
+		if (skills == null || skills.length == 0) {
 			return;
 		}
 		NpcInstance actor = getActor();
-		for (Skill sk : skills)
-		{
-			if (canUseSkill(sk, actor))
-			{
+		for (Skill sk : skills) {
+			if (canUseSkill(sk, actor)) {
 				skillMap.put(sk, 1000000);
 			}
 		}
 	}
 
-	protected Skill selectTopSkill(Map<Skill, Integer> skillMap)
-	{
-		if ((skillMap == null) || skillMap.isEmpty())
-		{
+	/**
+	 * Selects the top skill from the given skill map based on their weights.
+	 *
+	 * @param skillMap the map containing skills as keys and their corresponding weights as values
+	 * @return the top skill, or null if the skill map is null, empty, or all weights are equal
+	 */
+	protected Skill selectTopSkill(Map<Skill, Integer> skillMap) {
+		if (skillMap == null || skillMap.isEmpty()) {
 			return null;
 		}
-		int nWeight, topWeight = Integer.MIN_VALUE;
-		for (Skill next : skillMap.keySet())
-		{
-			if ((nWeight = skillMap.get(next)) > topWeight)
-			{
-				topWeight = nWeight;
+		int topWeight = Integer.MIN_VALUE;
+		for (Integer weight : skillMap.values()) {
+			if (weight > topWeight) {
+				topWeight = weight;
 			}
 		}
-		if (topWeight == Integer.MIN_VALUE)
-		{
+		if (topWeight == Integer.MIN_VALUE) {
 			return null;
 		}
 
-		Skill[] skills = new Skill[skillMap.size()];
-		nWeight = 0;
-		for (Map.Entry<Skill, Integer> e : skillMap.entrySet())
-		{
-			if (e.getValue() < topWeight)
-			{
-				continue;
+		List<Skill> topSkills = new ArrayList<>();
+		for (Map.Entry<Skill, Integer> entry : skillMap.entrySet()) {
+			if (entry.getValue() == topWeight) {
+				topSkills.add(entry.getKey());
 			}
-			skills[nWeight++] = e.getKey();
 		}
-		return skills[Rnd.get(nWeight)];
+		return topSkills.isEmpty() ? null : topSkills.get(Rnd.get(topSkills.size()));
 	}
 
-	protected boolean chooseTaskAndTargets(Skill skill, Creature target, double distance)
-	{
+	/**
+	 * Selects the top skill from the given skill map based on their associated integer values.
+	 * If the skill map is empty, null is returned.
+	 *
+	 * @param skillMap a map where the keys are skill arrays and the values are integers representing their associated values
+	 * @return the top skill array or null if the skill map is empty
+	 */
+	private Skill[] selectTopSkillArray(Map<Skill[], Integer> skillMap) {
+		if (skillMap.isEmpty()) {
+			return null;
+		}
+		return skillMap.entrySet().stream()
+				.max(Map.Entry.comparingByValue())
+				.map(Map.Entry::getKey)
+				.orElse(null);
+	}
+
+
+	/**
+	 * Chooses a task and targets for the NPC's behavior.
+	 *
+	 * @param skill the skill to be used by the NPC
+	 * @param target the target for the NPC's action
+	 * @param distance the distance between the NPC and the target
+	 * @return true if a task and targets were successfully chosen, false otherwise
+	 */
+	protected boolean chooseTaskAndTargets(Skill skill, Creature target, double distance) {
 		NpcInstance actor = getActor();
 
-		// Использовать скилл если можно, иначе атаковать
-		if (skill != null)
-		{
-			// Проверка цели, и смена если необходимо
-			if (actor.isMovementDisabled() && (distance > (skill.getAOECastRange() + 60)))
-			{
-				target = null;
-				if (skill.isOffensive())
-				{
-					ArrayList<Creature> targets = new ArrayList<>();
-					for (Creature cha : actor.getAggroList().getHateList())
-					{
-						if (!checkTarget(cha, skill.getAOECastRange() + 60) || !canUseSkill(skill, cha))
-						{
-							continue;
-						}
-						targets.add(cha);
-					}
-					if (!targets.isEmpty())
-					{
-						target = targets.get(Rnd.get(targets.size()));
-					}
-				}
-			}
-
-			if (target == null)
-			{
+		// Priorizar o uso de habilidades ofensivas se possível
+		if (skill != null) {
+			target = selectTargetForSkill(skill, distance, target, actor);
+			if (target == null) {
 				return false;
 			}
 
-			// Добавить новое задание
-			if (skill.isOffensive())
-			{
+			if (skill.isOffensive()) {
 				addTaskCast(target, skill);
-			}
-			else
-			{
+			} else {
 				addTaskBuff(target, skill);
 			}
 			return true;
 		}
 
-		// Смена цели, если необходимо
-		if (actor.isMovementDisabled() && (distance > (actor.getPhysicalAttackRange() + 40)))
-		{
-			target = null;
-			ArrayList<Creature> targets = new ArrayList<>();
-			for (Creature cha : actor.getAggroList().getHateList())
-			{
-				if (!checkTarget(cha, actor.getPhysicalAttackRange() + 40))
-				{
-					continue;
-				}
-				targets.add(cha);
-			}
-			if (!targets.isEmpty())
-			{
-				target = targets.get(Rnd.get(targets.size()));
-			}
+		// Seleção de habilidade ofensiva com base na distância
+		if (actor.isMovementDisabled() && (distance > (actor.getPhysicalAttackRange() + 40))) {
+			target = selectTargetForAttack(actor);
 		}
 
-		if (target == null)
-		{
+		if (target == null) {
 			return false;
 		}
 
-		// Добавить новое задание
 		addTaskAttack(target);
 		return true;
+	}
+
+	/**
+	 * This method is used to select a target for a given skill.
+	 *
+	 * @param skill  The skill to use.
+	 * @param distance  The distance to the target.
+	 * @param target  The current target.
+	 * @param actor  The NPC instance using the skill.
+	 * @return The selected target for the skill.
+	 */
+	private Creature selectTargetForSkill(Skill skill, double distance, Creature target, NpcInstance actor) {
+		// Verificar se o alvo atual é válido para a habilidade e mudar se necessário
+		if (actor.isMovementDisabled() && (distance > (skill.getAOECastRange() + 60))) {
+			target = null;
+			if (skill.isOffensive()) {
+				ArrayList<Creature> potentialTargets = new ArrayList<>();
+				for (Creature cha : actor.getAggroList().getHateList()) {
+					if (!checkTarget(cha, skill.getAOECastRange() + 60) || !canUseSkill(skill, cha)) {
+						continue;
+					}
+					potentialTargets.add(cha);
+				}
+				if (!potentialTargets.isEmpty()) {
+					target = potentialTargets.get(Rnd.get(potentialTargets.size()));
+				}
+			}
+		}
+		return target;
+	}
+
+	/**
+	 * Selects a target for the attack based on the given actor.
+	 *
+	 * @param actor The actor (NpcInstance) to select the target for.
+	 * @return The selected target (Creature), or null if no valid target is found.
+	 */
+	private Creature selectTargetForAttack(NpcInstance actor) {
+		Creature target = null;
+		ArrayList<Creature> potentialTargets = new ArrayList<>();
+		for (Creature cha : actor.getAggroList().getHateList()) {
+			if (!checkTarget(cha, actor.getPhysicalAttackRange() + 40)) {
+				continue;
+			}
+			potentialTargets.add(cha);
+		}
+		if (!potentialTargets.isEmpty()) {
+			target = potentialTargets.get(Rnd.get(potentialTargets.size()));
+		}
+		return target;
 	}
 
 	@Override
@@ -1695,8 +1907,12 @@ public class DefaultAI extends CharacterAI
 		_tasks.clear();
 	}
 
-	/** переход в режим бега через определенный интервал времени
-	 * @param interval */
+
+	/**
+	 * Starts a running task for the NPC actor with the specified interval.
+	 *
+	 * @param interval the interval in milliseconds between each execution of the running task
+	 */
 	protected void startRunningTask(long interval)
 	{
 		NpcInstance actor = getActor();
@@ -1737,150 +1953,153 @@ public class DefaultAI extends CharacterAI
 	}
 
 	/**
-	 * Оповестить дружественные цели об атаке.
-	 * @param attacker
-	 * @param damage
+	 * Notifies the friends of the creature about an attack.
+	 *
+	 * @param attacker the creature who is attacking
+	 * @param damage the amount of damage caused by the attack
 	 */
-	protected void notifyFriends(Creature attacker, int damage)
-	{
+	protected void notifyFriends(Creature attacker, int damage) {
 		NpcInstance actor = getActor();
-		if ((System.currentTimeMillis() - _lastFactionNotifyTime) > _minFactionNotifyInterval)
-		{
-			_lastFactionNotifyTime = System.currentTimeMillis();
-			if (actor.isMinion())
-			{
-				// Оповестить лидера об атаке
-				MonsterInstance master = ((MinionInstance) actor).getLeader();
-				if (master != null)
-				{
-					if (!master.isDead() && master.isVisible())
-					{
-						master.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, damage);
-					}
+		if ((System.currentTimeMillis() - _lastFactionNotifyTime) <= _minFactionNotifyInterval) {
+			return;
+		}
+		_lastFactionNotifyTime = System.currentTimeMillis();
 
-					// Оповестить минионов лидера об атаке
-					MinionList minionList = master.getMinionList();
-					if (minionList != null)
-					{
-						for (MinionInstance minion : minionList.getAliveMinions())
-						{
-							if (minion != actor)
-							{
-								minion.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, damage);
-							}
-						}
-					}
-				}
-			}
+		if (actor.isMinion()) {
+			notifyMasterAndFellowMinions(actor, attacker, damage);
+		}
 
-			// Оповестить своих минионов об атаке
-			MinionList minionList = actor.getMinionList();
-			if ((minionList != null) && minionList.hasAliveMinions())
-			{
-				for (MinionInstance minion : minionList.getAliveMinions())
-				{
-					minion.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, damage);
-				}
-			}
+		notifyOwnMinions(actor, attacker, damage);
+		notifySocialNpcs(actor, attacker, damage);
+	}
 
-			// Оповестить социальных мобов
-			for (NpcInstance npc : activeFactionTargets())
-			{
-				npc.getAI().notifyEvent(CtrlEvent.EVT_CLAN_ATTACKED, new Object[]
-				{
-					actor,
-					attacker,
-					damage
-				});
+	/**
+	 * Notifies the master and fellow minions of the given actor about an aggression event.
+	 *
+	 * @param actor    The actor whose master and fellow minions need to be notified.
+	 * @param attacker The creature that initiated the aggression.
+	 * @param damage   The amount of damage caused by the aggression.
+	 */
+	private void notifyMasterAndFellowMinions(NpcInstance actor, Creature attacker, int damage) {
+		MonsterInstance master = ((MinionInstance) actor).getLeader();
+		if (master != null && !master.isDead() && master.isVisible()) {
+			master.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, damage);
+			notifyMinions(master, attacker, damage, actor);
+		}
+	}
+
+	/**
+	 * Notifies all alive minions of the given actor about an aggression event.
+	 *
+	 * @param actor    the NPC instance that owns the minions
+	 * @param attacker the creature that initiated the aggression
+	 * @param damage   the amount of damage caused by the aggression
+	 */
+	private void notifyOwnMinions(NpcInstance actor, Creature attacker, int damage) {
+		MinionList minionList = actor.getMinionList();
+		if (minionList != null && minionList.hasAliveMinions()) {
+			for (MinionInstance minion : minionList.getAliveMinions()) {
+				minion.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, damage);
 			}
 		}
 	}
 
-	protected List<NpcInstance> activeFactionTargets()
-	{
-		NpcInstance actor = getActor();
-		if (actor.getFaction().isNone())
-		{
+	/**
+	 * Notifies the social NPCs in the active faction targets list about the attack on the actor.
+	 *
+	 * @param actor the NPC instance being attacked
+	 * @param attacker the creature performing the attack
+	 * @param damage the amount of damage caused by the attack
+	 */
+	private void notifySocialNpcs(NpcInstance actor, Creature attacker, int damage) {
+		for (NpcInstance npc : activeFactionTargets(actor)) {
+			npc.getAI().notifyEvent(CtrlEvent.EVT_CLAN_ATTACKED, new Object[]{actor, attacker, damage});
+		}
+	}
+
+	/**
+	 * Notifies the minions of a monster instance about an aggression event caused by an attacker.
+	 * The method iterates through the alive minions associated with the monster instance, excluding a specified minion,
+	 * and notifies their AI about the aggression event, passing the attacker and the damage inflicted.
+	 *
+	 * @param master    the monster instance whose minions are to be notified
+	 * @param attacker  the creature that caused the aggression event
+	 * @param damage    the amount of damage inflicted by the attacker
+	 * @param exclude   the minion instance to exclude from notification
+	 */
+	private void notifyMinions(MonsterInstance master, Creature attacker, int damage, NpcInstance exclude) {
+		MinionList minionList = master.getMinionList();
+		if (minionList != null) {
+			for (MinionInstance minion : minionList.getAliveMinions()) {
+				if (minion != exclude) {
+					minion.getAI().notifyEvent(CtrlEvent.EVT_AGGRESSION, attacker, damage);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Returns a list of active faction targets for the given NPC actor.
+	 *
+	 * @param actor the NPC actor for which to find active faction targets
+	 * @return a list of NpcInstance objects representing the active faction targets
+	 */
+	protected List<NpcInstance> activeFactionTargets(NpcInstance actor) {
+		if (actor.getFaction().isNone()) {
 			return Collections.emptyList();
 		}
-		List<NpcInstance> npcFriends = new ArrayList<NpcInstance>();
-		for (NpcInstance npc : World.getAroundNpc(actor))
-		{
-			if (!npc.isDead())
-			{
-				if (npc.isInFaction(actor))
-				{
-					if (npc.isInRangeZ(actor, npc.getFaction().getRange()))
-					{
-						if (GeoEngine.canSeeTarget(npc, actor, false))
-						{
-							npcFriends.add(npc);
-						}
-					}
-				}
+		List<NpcInstance> npcFriends = new ArrayList<>();
+		for (NpcInstance npc : World.getAroundNpc(actor)) {
+			if (!npc.isDead() && npc.isInFaction(actor) && npc.isInRangeZ(actor, npc.getFaction().getRange()) && GeoEngine.canSeeTarget(npc, actor, false)) {
+				npcFriends.add(npc);
 			}
 		}
 		return npcFriends;
 	}
 
-	protected boolean defaultThinkBuff(int rateSelf, int rateFriends)
-	{
+	protected boolean defaultThinkBuff(int rateSelf, int rateFriends) {
 		NpcInstance actor = getActor();
-		if (actor.isDead())
-		{
+		if (actor.isDead()) {
 			return true;
 		}
 
-		// TODO сделать более разумный выбор баффа, сначала выбирать подходящие а потом уже рандомно 1 из них
-		if (Rnd.chance(rateSelf))
-		{
-			double actorHp = actor.getCurrentHpPercents();
-
-			Skill[] skills = actorHp < 50 ? selectUsableSkills(actor, 0, _healSkills) : selectUsableSkills(actor, 0, _buffSkills);
-			if ((skills == null) || (skills.length == 0))
-			{
-				return false;
-			}
-
-			Skill skill = skills[Rnd.get(skills.length)];
-			addTaskBuff(actor, skill);
-			return true;
+		if (Rnd.chance(rateSelf)) {
+			return tryToBuffOrHeal(actor);
 		}
 
-		if (Rnd.chance(rateFriends))
-		{
-			for (NpcInstance npc : activeFactionTargets())
-			{
-				double targetHp = npc.getCurrentHpPercents();
-
-				Skill[] skills = targetHp < 50 ? selectUsableSkills(actor, 0, _healSkills) : selectUsableSkills(actor, 0, _buffSkills);
-				if ((skills == null) || (skills.length == 0))
-				{
-					continue;
+		if (Rnd.chance(rateFriends)) {
+			for (NpcInstance npc : activeFactionTargets(actor)) {
+				if (tryToBuffOrHeal(npc)) {
+					return true;
 				}
-
-				Skill skill = skills[Rnd.get(skills.length)];
-				addTaskBuff(actor, skill);
-				return true;
 			}
 		}
 
 		return false;
 	}
 
-	protected boolean defaultFightTask()
-	{
+	private boolean tryToBuffOrHeal(Creature target) {
+		double targetHp = target.getCurrentHpPercents();
+		Skill[] skills = targetHp < 50 ? selectUsableSkills(target, 0, _healSkills) : selectUsableSkills(target, 0, _buffSkills);
+		if (skills == null || skills.length == 0) {
+			return false;
+		}
+		Skill skill = skills[Rnd.get(skills.length)];
+		addTaskBuff(target, skill);
+		return true;
+	}
+
+
+	protected boolean defaultFightTask() {
 		clearTasks();
 
 		NpcInstance actor = getActor();
-		if (actor.isDead() || actor.isAMuted())
-		{
+		if (actor.isDead() || actor.isAMuted()) {
 			return false;
 		}
 
-		Creature target;
-		if ((target = prepareTarget()) == null)
-		{
+		Creature target = prepareTarget();
+		if (target == null) {
 			return false;
 		}
 
@@ -1888,51 +2107,47 @@ public class DefaultAI extends CharacterAI
 		double targetHp = target.getCurrentHpPercents();
 		double actorHp = actor.getCurrentHpPercents();
 
-		Skill[] dam = Rnd.chance(getRateDAM()) ? selectUsableSkills(target, distance, _damSkills) : null;
-		Skill[] dot = Rnd.chance(getRateDOT()) ? selectUsableSkills(target, distance, _dotSkills) : null;
-		Skill[] debuff = targetHp > 10 ? Rnd.chance(getRateDEBUFF()) ? selectUsableSkills(target, distance, _debuffSkills) : null : null;
-		Skill[] stun = Rnd.chance(getRateSTUN()) ? selectUsableSkills(target, distance, _stunSkills) : null;
-		Skill[] heal = actorHp < 50 ? Rnd.chance(getRateHEAL()) ? selectUsableSkills(actor, 0, _healSkills) : null : null;
-		Skill[] buff = Rnd.chance(getRateBUFF()) ? selectUsableSkills(actor, 0, _buffSkills) : null;
-
-		RndSelector<Skill[]> rnd = new RndSelector<>();
-		if (!actor.isAMuted())
-		{
-			rnd.add(null, getRatePHYS());
+		Map<Skill[], Integer> skillMap = new HashMap<>();
+		if (actorHp < 50 && Rnd.chance(getRateHEAL())) {
+			Skill[] heal = selectUsableSkills(actor, 0, _healSkills);
+			skillMap.put(heal, getRateHEAL());
 		}
-		rnd.add(dam, getRateDAM());
-		rnd.add(dot, getRateDOT());
-		rnd.add(debuff, getRateDEBUFF());
-		rnd.add(heal, getRateHEAL());
-		rnd.add(buff, getRateBUFF());
-		rnd.add(stun, getRateSTUN());
+		if (Rnd.chance(getRateBUFF())) {
+			Skill[] buff = selectUsableSkills(actor, 0, _buffSkills);
+			skillMap.put(buff, getRateBUFF());
+		}
+		if (Rnd.chance(getRateDAM())) {
+			Skill[] dam = selectUsableSkills(target, distance, _damSkills);
+			skillMap.put(dam, getRateDAM());
+		}
+		if (Rnd.chance(getRateDOT())) {
+			Skill[] dot = selectUsableSkills(target, distance, _dotSkills);
+			skillMap.put(dot, getRateDOT());
+		}
+		if (targetHp > 10 && Rnd.chance(getRateDEBUFF())) {
+			Skill[] debuff = selectUsableSkills(target, distance, _debuffSkills);
+			skillMap.put(debuff, getRateDEBUFF());
+		}
+		if (Rnd.chance(getRateSTUN())) {
+			Skill[] stun = selectUsableSkills(target, distance, _stunSkills);
+			skillMap.put(stun, getRateSTUN());
+		}
 
-		Skill[] selected = rnd.select();
-		rnd.clear();
-		if (selected != null)
-		{
-			if ((selected == dam) || (selected == dot))
-			{
+		Skill[] selected = selectTopSkillArray(skillMap);
+		if (selected != null) {
+			if (selected == _damSkills || selected == _dotSkills) {
 				return chooseTaskAndTargets(selectTopSkillByDamage(actor, target, distance, selected), target, distance);
 			}
-
-			if ((selected == debuff) || (selected == stun))
-			{
+			if (selected == _debuffSkills || selected == _stunSkills) {
 				return chooseTaskAndTargets(selectTopSkillByDebuff(actor, target, distance, selected), target, distance);
 			}
-
-			if (selected == buff)
-			{
+			if (selected == _buffSkills) {
 				return chooseTaskAndTargets(selectTopSkillByBuff(actor, selected), actor, distance);
 			}
-
-			if (selected == heal)
-			{
+			if (selected == _healSkills) {
 				return chooseTaskAndTargets(selectTopSkillByHeal(actor, selected), actor, distance);
 			}
 		}
-
-		// TODO сделать лечение и баф дружественных целей
 
 		return chooseTaskAndTargets(null, target, distance);
 	}
@@ -1983,8 +2198,10 @@ public class DefaultAI extends CharacterAI
 	}
 
 	/**
-	 * Задержка, перед переключением в активный режим после атаки, если цель не найдена (вне зоны досягаемости, убита, очищен хейт)
-	 * @return
+	 * Returns the maximum attack timeout in milliseconds.
+	 * The timeout is used to determine the maximum amount of time for an attack to execute.
+	 *
+	 * @return the maximum attack timeout in milliseconds
 	 */
 	public int getMaxAttackTimeout()
 	{
@@ -1992,8 +2209,9 @@ public class DefaultAI extends CharacterAI
 	}
 
 	/**
-	 * Задержка, перед телепортом к цели, если не удается дойти
-	 * @return
+	 * Returns the teleport timeout in milliseconds.
+	 *
+	 * @return the teleport timeout in milliseconds.
 	 */
 	public int getTeleportTimeout()
 	{
